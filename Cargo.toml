@@ -1,7 +1,7 @@
 [package]
-name = "eframe_template"
+name = "polarsgui"
 version = "0.1.0"
-authors = ["Emil Ernerfeldt <emil.ernerfeldt@gmail.com>"]
+authors = ["Federico Carles<federico.carles@pm.me>"]
 edition = "2021"
 rust-version = "1.65"
 
@@ -14,6 +14,8 @@ eframe = { version = "0.21.0", default-features = false, features = [
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
     "persistence",   # Enable restoring app state when restarting the app.
 ] }
+polars= { versio = "0.29.0", features=["rows"]}
+rfd = { version = "0.11.3"}
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
