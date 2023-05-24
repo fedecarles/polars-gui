@@ -48,24 +48,25 @@ impl TemplateApp {
 
 #[derive(Clone, Debug)]
 pub struct DataFrameContainer {
-    name: String,
-    shape: String,
+    title: String,
+    shape: (usize, usize),
     data: DataFrame,
     table_data: Vec<Vec<String>>,
     columns: Vec<String>,
     data_display: bool,
+    is_open: bool,
 }
 
 impl DataFrameContainer {
     fn new(file_path: PathBuf) -> Self {
         let df: DataFrame = CsvReader::from_path(&file_path).unwrap().finish().unwrap();
         Self {
-            name: String::from(format!(
+            title: String::from(format!(
                 "{}{}",
                 String::from("🗖 "),
                 String::from(file_path.file_name().unwrap().to_str().unwrap())
             )),
-            shape: String::from(format!("{:?}", df.shape())),
+            shape: df.shape(),
             data: df.clone(),
             table_data: Vec::new(),
             columns: df
@@ -74,65 +75,61 @@ impl DataFrameContainer {
                 .map(|s| s.to_string())
                 .collect(),
             data_display: false,
+            is_open: true,
         }
     }
 
-    fn ui(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.label("Shape: ");
-            ui.label(self.shape.to_owned());
-        });
-        ui.horizontal(|ui| {
-            ui.label("Data: ");
-            let btn = ui.button("View");
-            if btn.clicked() {
-                self.table_data = df_to_vec(&self.data);
-                self.data_display = !self.data_display;
-            }
-        });
-        ui.collapsing("Columns", |ui| {
-            for c in &self.columns {
-                ui.label(c.to_owned());
-            }
-        });
-    }
-
     fn show(&mut self, ctx: &egui::Context) {
-        let window = Window::new(&self.name);
-        window.show(ctx, |ui| {
-            self.ui(ui);
-        });
-    }
+        let window = Window::new(&self.title);
 
-    fn data_ui(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.label("Rows: ");
-            ui.add(Slider::new(&mut 0, 0..=1000));
-        });
-
-        Grid::new(&self.name)
-            .num_columns(self.table_data[0].len())
-            .striped(true)
-            .show(ui, |ui| {
-                for row in &self.table_data {
-                    for cell in row {
-                        ui.add(Label::new(cell));
-                    }
-                    ui.end_row()
+        window.open(&mut self.is_open).show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Shape: ");
+                ui.label(String::from(format!("{:?}", &self.shape)));
+            });
+            ui.horizontal(|ui| {
+                ui.label("Data: ");
+                let btn = ui.button("View");
+                if btn.clicked() {
+                    self.table_data = df_to_vec(&self.data);
+                    self.data_display = !&self.data_display;
                 }
             });
+            ui.collapsing("Columns", |ui| {
+                for c in &self.columns {
+                    ui.label(c.to_owned());
+                }
+            });
+        });
     }
 
     fn show_data(&mut self, ctx: &egui::Context) {
-        let window = Window::new(format!("{}{}", String::from("Data: "), &self.name))
+        let window = Window::new(format!("{}{}", String::from("Data: "), &self.title))
+            .open(&mut self.data_display)
             .fixed_size((300.0, 300.0))
             .resize(|r| r.max_size((700.0, 700.0)))
             .resizable(true)
             .scroll2([true, true])
             .constrain(false)
             .collapsible(true);
+
         window.show(ctx, |ui| {
-            self.data_ui(ui);
+            ui.horizontal(|ui| {
+                ui.label("Rows: ");
+                ui.add(Slider::new(&mut 0, 0..=1000));
+            });
+
+            Grid::new(&self.title)
+                .num_columns(self.table_data[0].len())
+                .striped(true)
+                .show(ui, |ui| {
+                    for row in &self.table_data {
+                        for cell in row {
+                            ui.add(Label::new(cell));
+                        }
+                        ui.end_row()
+                    }
+                });
         });
     }
 }
