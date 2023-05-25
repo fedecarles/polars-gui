@@ -87,8 +87,8 @@ impl DataFrameContainer {
         window
             .open(&mut self.is_open)
             .scroll2([true, true])
-            .fixed_size((500.0, 700.0))
-            .resize(|r| r.max_size((700.0, 700.0)))
+            //.fixed_size((500.0, 1080.0))
+            .resize(|r| r.max_size((1920.0, 1080.0)))
             .resizable(true)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
@@ -113,8 +113,8 @@ impl DataFrameContainer {
                         .num_columns(self.summary_data[0].len())
                         .show(ui, |ui| {
                             for row in &self.summary_data {
-                                for c in row {
-                                    ui.add(Label::new(c.replace('"', "")));
+                                for cell in row {
+                                    ui.add(Label::new(cell.replace('"', "")));
                                 }
                                 ui.end_row()
                             }
@@ -126,8 +126,8 @@ impl DataFrameContainer {
     fn show_data(&mut self, ctx: &egui::Context) {
         let window = Window::new(format!("{}{}", String::from("Data: "), &self.title))
             .open(&mut self.data_display)
-            .fixed_size((300.0, 300.0))
-            .resize(|r| r.max_size((700.0, 700.0)))
+            //.fixed_size((300.0, 1080.0))
+            .resize(|r| r.max_size((1920.0, 1080.0)))
             .resizable(true)
             .scroll2([true, true])
             .constrain(false)
@@ -145,7 +145,7 @@ impl DataFrameContainer {
                 .show(ui, |ui| {
                     for row in &self.table_data {
                         for cell in row {
-                            ui.add(Label::new(cell));
+                            ui.add(Label::new(cell.replace('"', "")));
                         }
                         ui.end_row()
                     }
