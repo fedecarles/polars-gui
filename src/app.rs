@@ -1,10 +1,9 @@
-use egui::Grid;
-use egui::Label;
-use egui::Slider;
-use egui::Window;
+use egui::{ComboBox, TextEdit, Window};
+use egui_extras::{Column, TableBuilder};
 use polars::prelude::*;
 use rfd::FileDialog;
 use std::cell::RefCell;
+use std::fmt::Debug;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -51,11 +50,11 @@ pub struct DataFrameContainer {
     title: String,
     shape: (usize, usize),
     data: DataFrame,
-    table_data: Vec<Vec<String>>,
-    summary_data: Vec<Vec<String>>,
+    summary_data: DataFrame,
     columns: Vec<String>,
     data_display: bool,
     is_open: bool,
+    filter: DataFrameFilter,
 }
 
 impl DataFrameContainer {
@@ -69,8 +68,7 @@ impl DataFrameContainer {
             )),
             shape: df.shape(),
             data: df.clone(),
-            table_data: Vec::new(),
-            summary_data: df_to_vec(&df.describe(None).unwrap_or_default()),
+            summary_data: df.describe(None).unwrap_or_default(),
             columns: df
                 .get_column_names()
                 .iter()
@@ -78,6 +76,7 @@ impl DataFrameContainer {
                 .collect(),
             data_display: false,
             is_open: true,
+            filter: DataFrameFilter::default(),
         }
     }
 
@@ -87,7 +86,6 @@ impl DataFrameContainer {
         window
             .open(&mut self.is_open)
             .scroll2([true, true])
-            //.fixed_size((500.0, 1080.0))
             .resize(|r| r.max_size((1920.0, 1080.0)))
             .resizable(true)
             .show(ctx, |ui| {
@@ -99,7 +97,6 @@ impl DataFrameContainer {
                     ui.label("Data: ");
                     let btn = ui.button("View");
                     if btn.clicked() {
-                        self.table_data = df_to_vec(&self.data);
                         self.data_display = !&self.data_display;
                     }
                 });
@@ -109,16 +106,89 @@ impl DataFrameContainer {
                     }
                 });
                 ui.collapsing("Summary", |ui| {
-                    Grid::new("summary")
-                        .num_columns(self.summary_data[0].len())
-                        .show(ui, |ui| {
-                            for row in &self.summary_data {
-                                for cell in row {
-                                    ui.add(Label::new(cell.replace('"', "")));
-                                }
-                                ui.end_row()
+                    let nr_cols = self.summary_data[0].len();
+                    let nr_rows = self.summary_data[1].len();
+                    let cols = &self.summary_data.get_column_names();
+
+                    TableBuilder::new(ui)
+                        .columns(Column::auto(), nr_cols)
+                        .striped(true)
+                        .resizable(true)
+                        .header(5.0, |mut header| {
+                            for head in cols {
+                                header.col(|ui| {
+                                    ui.heading(format!("{}", head));
+                                });
                             }
                         })
+                        .body(|body| {
+                            body.rows(10.0, nr_rows, |row_index, mut row| {
+                                for col in cols {
+                                    row.col(|ui| {
+                                        if let Ok(column) = &self.summary_data.column(col) {
+                                            if let Ok(value) = column.get(row_index) {
+                                                ui.label(format!("{}", value));
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                        });
+                });
+                ui.collapsing("Filter", |ui| {
+                    ui.horizontal(|ui| {
+                        ComboBox::from_label("is")
+                            .selected_text(&self.filter.column)
+                            .show_ui(ui, |ui| {
+                                for col in &self.columns {
+                                    ui.selectable_value(
+                                        &mut self.filter.column,
+                                        col.to_owned(),
+                                        col,
+                                    );
+                                }
+                            });
+                        ComboBox::from_label("than")
+                            .selected_text(format!("{:?}", &self.filter.operation))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut self.filter.operation,
+                                    FilterOperations::Equal,
+                                    "=",
+                                );
+                                ui.selectable_value(
+                                    &mut self.filter.operation,
+                                    FilterOperations::GreaterThan,
+                                    ">",
+                                );
+                                ui.selectable_value(
+                                    &mut self.filter.operation,
+                                    FilterOperations::GreaterEqualThan,
+                                    ">=",
+                                );
+                                ui.selectable_value(
+                                    &mut self.filter.operation,
+                                    FilterOperations::LowerThan,
+                                    "<",
+                                );
+                                ui.selectable_value(
+                                    &mut self.filter.operation,
+                                    FilterOperations::LowerEqualThan,
+                                    "=<",
+                                );
+                                ui.selectable_value(
+                                    &mut self.filter.operation,
+                                    FilterOperations::IsNull,
+                                    "null",
+                                );
+                                ui.selectable_value(
+                                    &mut self.filter.operation,
+                                    FilterOperations::IsNotNull,
+                                    "not null",
+                                );
+                            });
+                        ui.add(TextEdit::singleline(&mut self.filter.value))
+                    })
                 });
             });
     }
@@ -126,7 +196,6 @@ impl DataFrameContainer {
     fn show_data(&mut self, ctx: &egui::Context) {
         let window = Window::new(format!("{}{}", String::from("Data: "), &self.title))
             .open(&mut self.data_display)
-            //.fixed_size((300.0, 1080.0))
             .resize(|r| r.max_size((1920.0, 1080.0)))
             .resizable(true)
             .scroll2([true, true])
@@ -134,21 +203,40 @@ impl DataFrameContainer {
             .collapsible(true);
 
         window.show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Rows: ");
-                ui.add(Slider::new(&mut 0, 0..=1000));
-            });
+            let nr_cols = self.columns.len();
+            let nr_rows = self.data[1].len();
+            let cols = &self.data.get_column_names();
 
-            Grid::new(&self.title)
-                .num_columns(self.table_data[0].len())
+            TableBuilder::new(ui)
+                .column(Column::auto())
+                .columns(Column::auto(), nr_cols)
                 .striped(true)
-                .show(ui, |ui| {
-                    for row in &self.table_data {
-                        for cell in row {
-                            ui.add(Label::new(cell.replace('"', "")));
-                        }
-                        ui.end_row()
+                .resizable(true)
+                .header(5.0, |mut header| {
+                    header.col(|ui| {
+                        ui.label(format!("{}", "Row"));
+                    });
+                    for head in cols {
+                        header.col(|ui| {
+                            ui.heading(format!("{}", head));
+                        });
                     }
+                })
+                .body(|body| {
+                    body.rows(10.0, nr_rows, |row_index, mut row| {
+                        row.col(|ui| {
+                            ui.label(format!("{}", row_index));
+                        });
+                        for col in cols {
+                            row.col(|ui| {
+                                if let Ok(column) = &self.data.column(col) {
+                                    if let Ok(value) = column.get(row_index) {
+                                        ui.label(format!("{}", value));
+                                    }
+                                }
+                            });
+                        }
+                    });
                 });
         });
     }
@@ -202,25 +290,40 @@ impl eframe::App for TemplateApp {
     }
 }
 
-fn df_to_vec(df: &DataFrame) -> Vec<Vec<String>> {
-    let mut string_vectors: Vec<Vec<String>> = Vec::new();
+#[derive(Clone, Debug, PartialEq)]
+pub struct DataFrameFilter {
+    column: String,
+    operation: FilterOperations,
+    value: String,
+}
 
-    let mut headers: Vec<String> = df
-        .get_column_names()
-        .to_vec()
-        .iter()
-        .map(|h| h.to_string())
-        .collect();
-    headers.insert(0, String::from("index"));
-    string_vectors.push(headers);
-
-    //FIXME This works but is very slow.
-    for row in 0..df.height() {
-        let df_row = df.get(row);
-        let r = df_row.unwrap_or_default().to_vec();
-        let mut str_vec: Vec<String> = r.iter().map(|x| x.to_string()).collect();
-        str_vec.insert(0, row.to_string());
-        string_vectors.push(str_vec)
+impl DataFrameFilter {
+    fn new(&self, column: &str, operation: FilterOperations, value: &str) -> Self {
+        Self {
+            column: String::from(column),
+            operation: operation,
+            value: String::from(value),
+        }
     }
-    string_vectors
+}
+
+impl Default for DataFrameFilter {
+    fn default() -> Self {
+        Self {
+            column: String::from(""),
+            operation: FilterOperations::Equal,
+            value: String::from(""),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum FilterOperations {
+    Equal,
+    GreaterThan,
+    GreaterEqualThan,
+    LowerThan,
+    LowerEqualThan,
+    IsNull,
+    IsNotNull,
 }
