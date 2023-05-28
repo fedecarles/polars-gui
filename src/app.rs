@@ -106,9 +106,13 @@ impl DataFrameContainer {
                     }
                 });
                 ui.collapsing("Summary", |ui| {
-                    let nr_cols = self.summary_data[0].len();
-                    let nr_rows = self.summary_data[1].len();
+                    let nr_cols = self.summary_data.width();
+                    let nr_rows = self.summary_data.height();
                     let cols = &self.summary_data.get_column_names();
+
+                    println!("{}", nr_cols);
+                    println!("{}", nr_rows);
+                    println!("{:?}", cols);
 
                     TableBuilder::new(ui)
                         .columns(Column::auto(), nr_cols)
@@ -203,8 +207,8 @@ impl DataFrameContainer {
             .collapsible(true);
 
         window.show(ctx, |ui| {
-            let nr_cols = self.columns.len();
-            let nr_rows = self.data[1].len();
+            let nr_cols = self.data.width();
+            let nr_rows = self.data.height();
             let cols = &self.data.get_column_names();
 
             TableBuilder::new(ui)
