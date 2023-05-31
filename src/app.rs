@@ -55,6 +55,7 @@ pub struct DataFrameContainer {
     data_display: bool,
     is_open: bool,
     filter: DataFrameFilter,
+    filter_action: FilterAction,
 }
 
 impl DataFrameContainer {
@@ -77,6 +78,7 @@ impl DataFrameContainer {
             data_display: false,
             is_open: true,
             filter: DataFrameFilter::default(),
+            filter_action: FilterAction::New,
         }
     }
 
@@ -141,6 +143,10 @@ impl DataFrameContainer {
                 });
                 ui.collapsing("Filter", |ui| {
                     ui.horizontal(|ui| {
+                        ui.radio_value(&mut self.filter_action, FilterAction::New, "New");
+                        ui.radio_value(&mut self.filter_action, FilterAction::InPlace, "In Place");
+                    });
+                    ui.horizontal(|ui| {
                         ComboBox::from_label("is")
                             .selected_text(&self.filter.column)
                             .show_ui(ui, |ui| {
@@ -157,8 +163,13 @@ impl DataFrameContainer {
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(
                                     &mut self.filter.operation,
-                                    FilterOperations::Equal,
+                                    FilterOperations::EqualNum,
                                     "=",
+                                );
+                                ui.selectable_value(
+                                    &mut self.filter.operation,
+                                    FilterOperations::EqualStr,
+                                    "= ''",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
@@ -191,7 +202,21 @@ impl DataFrameContainer {
                                     "not null",
                                 );
                             });
-                        ui.add(TextEdit::singleline(&mut self.filter.value))
+                        ui.add(TextEdit::singleline(&mut self.filter.value));
+                        if ui.button("Filter").clicked() {
+                            let f_df = filter_dataframe(
+                                self.data.clone(),
+                                &self.filter.column.clone(),
+                                &self.filter.operation.clone(),
+                                &self.filter.value.clone(),
+                            );
+                            // TODO: Better handling of filtered dataframe
+                            if f_df.is_ok() {
+                                self.data = f_df.unwrap()
+                            } else {
+                                self.data = self.data.clone()
+                            }
+                        }
                     })
                 });
             });
@@ -315,7 +340,7 @@ impl Default for DataFrameFilter {
     fn default() -> Self {
         Self {
             column: String::from(""),
-            operation: FilterOperations::Equal,
+            operation: FilterOperations::EqualNum,
             value: String::from(""),
         }
     }
@@ -323,11 +348,55 @@ impl Default for DataFrameFilter {
 
 #[derive(Clone, Debug, PartialEq)]
 enum FilterOperations {
-    Equal,
+    EqualNum,
+    EqualStr,
     GreaterThan,
     GreaterEqualThan,
     LowerThan,
     LowerEqualThan,
     IsNull,
     IsNotNull,
+}
+
+fn filter_dataframe(
+    df: DataFrame,
+    column: &str,
+    operation: &FilterOperations,
+    value: &String,
+) -> Result<DataFrame, PolarsError> {
+    let dff = match operation {
+        FilterOperations::EqualNum => df
+            .lazy()
+            .filter(col(column).eq(lit(value.parse::<f64>().unwrap_or_default())))
+            .collect(),
+        FilterOperations::EqualStr => df
+            .lazy()
+            .filter(col(column).eq(lit(value.parse::<String>().unwrap_or_default())))
+            .collect(),
+        FilterOperations::GreaterThan => df
+            .lazy()
+            .filter(col(column).gt(lit(value.parse::<f64>().unwrap_or_default())))
+            .collect(),
+        FilterOperations::GreaterEqualThan => df
+            .lazy()
+            .filter(col(column).gt_eq(lit(value.parse::<f64>().unwrap_or_default())))
+            .collect(),
+        FilterOperations::LowerThan => df
+            .lazy()
+            .filter(col(column).lt(lit(value.parse::<f64>().unwrap_or_default())))
+            .collect(),
+        FilterOperations::LowerEqualThan => df
+            .lazy()
+            .filter(col(column).lt_eq(lit(value.parse::<f64>().unwrap_or_default())))
+            .collect(),
+        FilterOperations::IsNull => df.lazy().filter(col(column).is_null()).collect(),
+        FilterOperations::IsNotNull => df.lazy().filter(col(column).is_not_null()).collect(),
+    };
+    dff
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum FilterAction {
+    InPlace,
+    New,
 }
