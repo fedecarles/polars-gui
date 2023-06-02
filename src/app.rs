@@ -3,6 +3,7 @@ use egui_extras::{Column, TableBuilder};
 use polars::prelude::*;
 use rfd::FileDialog;
 use std::cell::RefCell;
+use std::cell::RefMut;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -56,17 +57,13 @@ pub struct DataFrameContainer {
     is_open: bool,
     filter: DataFrameFilter,
     filter_action: FilterAction,
+    filtered_data: Option<DataFrame>,
 }
 
 impl DataFrameContainer {
-    fn new(file_path: PathBuf) -> Self {
-        let df: DataFrame = CsvReader::from_path(&file_path).unwrap().finish().unwrap();
+    fn new(df: DataFrame, title: &str) -> Self {
         Self {
-            title: String::from(format!(
-                "{}{}",
-                String::from("🗖 "),
-                String::from(file_path.file_name().unwrap().to_str().unwrap())
-            )),
+            title: String::from(format!("{}{}", String::from("🗖 "), String::from(title))),
             shape: df.shape(),
             data: df.clone(),
             summary_data: df.describe(None).unwrap_or_default(),
@@ -79,6 +76,7 @@ impl DataFrameContainer {
             is_open: true,
             filter: DataFrameFilter::default(),
             filter_action: FilterAction::New,
+            filtered_data: None,
         }
     }
 
@@ -111,10 +109,6 @@ impl DataFrameContainer {
                     let nr_cols = self.summary_data.width();
                     let nr_rows = self.summary_data.height();
                     let cols = &self.summary_data.get_column_names();
-
-                    println!("{}", nr_cols);
-                    println!("{}", nr_rows);
-                    println!("{:?}", cols);
 
                     TableBuilder::new(ui)
                         .columns(Column::auto(), nr_cols)
@@ -158,51 +152,51 @@ impl DataFrameContainer {
                                     );
                                 }
                             });
-                        ComboBox::from_label("than")
+                        ComboBox::from_label("than/to")
                             .selected_text(format!("{:?}", &self.filter.operation))
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(
                                     &mut self.filter.operation,
-                                    FilterOperations::EqualNum,
+                                    FilterOps::EqualNum,
                                     "=",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
-                                    FilterOperations::EqualStr,
+                                    FilterOps::EqualStr,
                                     "= ''",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
-                                    FilterOperations::GreaterThan,
+                                    FilterOps::GreaterThan,
                                     ">",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
-                                    FilterOperations::GreaterEqualThan,
+                                    FilterOps::GreaterEqualThan,
                                     ">=",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
-                                    FilterOperations::LowerThan,
+                                    FilterOps::LowerThan,
                                     "<",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
-                                    FilterOperations::LowerEqualThan,
+                                    FilterOps::LowerEqualThan,
                                     "=<",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
-                                    FilterOperations::IsNull,
+                                    FilterOps::IsNull,
                                     "null",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
-                                    FilterOperations::IsNotNull,
+                                    FilterOps::IsNotNull,
                                     "not null",
                                 );
                             });
-                        ui.add(TextEdit::singleline(&mut self.filter.value));
+                        ui.add(TextEdit::singleline(&mut self.filter.value).desired_width(100.0));
                         if ui.button("Filter").clicked() {
                             let f_df = filter_dataframe(
                                 self.data.clone(),
@@ -211,11 +205,12 @@ impl DataFrameContainer {
                                 &self.filter.value.clone(),
                             );
                             // TODO: Better handling of filtered dataframe
+                            // TODO: Chained filtering
                             if f_df.is_ok() {
-                                self.data = f_df.unwrap()
+                                self.filtered_data = f_df.ok();
                             } else {
                                 self.data = self.data.clone()
-                            }
+                            };
                         }
                     })
                 });
@@ -287,8 +282,13 @@ impl eframe::App for TemplateApp {
                 ui.menu_button("New", |ui| {
                     if ui.button("DataFrame").clicked() {
                         if let Some(path) = FileDialog::new().pick_file() {
+                            let df: DataFrame =
+                                CsvReader::from_path(&path).unwrap().finish().unwrap();
+                            let file_name: &str = &path.file_name().unwrap().to_str().unwrap();
                             if let Some(f) = &mut self.frames {
-                                f.push(Rc::new(RefCell::new(DataFrameContainer::new(path))))
+                                f.push(Rc::new(RefCell::new(DataFrameContainer::new(
+                                    df, file_name,
+                                ))))
                             }
                         }
                     }
@@ -302,7 +302,7 @@ impl eframe::App for TemplateApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(frames_vec) = &self.frames {
+            if let Some(frames_vec) = &mut self.frames.clone() {
                 for frame_rc in frames_vec.iter() {
                     let mut frame_refcell = frame_rc.borrow_mut();
                     frame_refcell.show(ctx);
@@ -312,8 +312,39 @@ impl eframe::App for TemplateApp {
                             frame_refcell.show_data(ctx)
                         }
                     }
+
+                    // Filter creates a new DataFrameContainer. InPlace option updates the
+                    // existing container with the new one. The New option displays the filtered
+                    // data in a new window.
+                    // TODO: revise/re-factor filter functionality
+                    if frame_refcell.filtered_data.is_some() {
+                        let filtered_title =
+                            format!("filtered_{}{}", &frame_refcell.title, frames_vec.len());
+
+                        let filtered_df = DataFrameContainer::new(
+                            frame_refcell.clone().filtered_data.unwrap_or_default(),
+                            &filtered_title,
+                        );
+                        match frame_refcell.filter_action {
+                            FilterAction::New => {
+                                self.frames
+                                    .as_mut()
+                                    .unwrap()
+                                    .push(Rc::new(RefCell::new(filtered_df)).to_owned());
+                                // cleanup. set original filtered data back to None
+                                frame_refcell.filtered_data = None;
+                            }
+                            FilterAction::InPlace => {
+                                frame_refcell.data = filtered_df.data.clone();
+                                frame_refcell.shape = filtered_df.data.shape().clone();
+                                frame_refcell.summary_data =
+                                    filtered_df.data.clone().describe(None).unwrap_or_default();
+                            }
+                        }
+                    }
                 }
             }
+
             egui::warn_if_debug_build(ui);
         });
     }
@@ -322,12 +353,12 @@ impl eframe::App for TemplateApp {
 #[derive(Clone, Debug, PartialEq)]
 pub struct DataFrameFilter {
     column: String,
-    operation: FilterOperations,
+    operation: FilterOps,
     value: String,
 }
 
 impl DataFrameFilter {
-    fn new(&self, column: &str, operation: FilterOperations, value: &str) -> Self {
+    fn new(&self, column: &str, operation: FilterOps, value: &str) -> Self {
         Self {
             column: String::from(column),
             operation: operation,
@@ -340,14 +371,14 @@ impl Default for DataFrameFilter {
     fn default() -> Self {
         Self {
             column: String::from(""),
-            operation: FilterOperations::EqualNum,
+            operation: FilterOps::EqualNum,
             value: String::from(""),
         }
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum FilterOperations {
+enum FilterOps {
     EqualNum,
     EqualStr,
     GreaterThan,
@@ -361,36 +392,36 @@ enum FilterOperations {
 fn filter_dataframe(
     df: DataFrame,
     column: &str,
-    operation: &FilterOperations,
+    operation: &FilterOps,
     value: &String,
 ) -> Result<DataFrame, PolarsError> {
     let dff = match operation {
-        FilterOperations::EqualNum => df
+        FilterOps::EqualNum => df
             .lazy()
             .filter(col(column).eq(lit(value.parse::<f64>().unwrap_or_default())))
             .collect(),
-        FilterOperations::EqualStr => df
+        FilterOps::EqualStr => df
             .lazy()
             .filter(col(column).eq(lit(value.parse::<String>().unwrap_or_default())))
             .collect(),
-        FilterOperations::GreaterThan => df
+        FilterOps::GreaterThan => df
             .lazy()
             .filter(col(column).gt(lit(value.parse::<f64>().unwrap_or_default())))
             .collect(),
-        FilterOperations::GreaterEqualThan => df
+        FilterOps::GreaterEqualThan => df
             .lazy()
             .filter(col(column).gt_eq(lit(value.parse::<f64>().unwrap_or_default())))
             .collect(),
-        FilterOperations::LowerThan => df
+        FilterOps::LowerThan => df
             .lazy()
             .filter(col(column).lt(lit(value.parse::<f64>().unwrap_or_default())))
             .collect(),
-        FilterOperations::LowerEqualThan => df
+        FilterOps::LowerEqualThan => df
             .lazy()
             .filter(col(column).lt_eq(lit(value.parse::<f64>().unwrap_or_default())))
             .collect(),
-        FilterOperations::IsNull => df.lazy().filter(col(column).is_null()).collect(),
-        FilterOperations::IsNotNull => df.lazy().filter(col(column).is_not_null()).collect(),
+        FilterOps::IsNull => df.lazy().filter(col(column).is_null()).collect(),
+        FilterOps::IsNotNull => df.lazy().filter(col(column).is_not_null()).collect(),
     };
     dff
 }
