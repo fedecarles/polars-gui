@@ -1,0 +1,36 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "codelldb",
+      "request": "launch",
+      "name": "Launch",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin",
+          "${workspaceFolderBasename}"
+        ],
+        "filter": {
+          "name": "${workspaceFolderBasename}",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceRoot}",
+      "env": {},
+      "sourceLanguages": ["rust"],
+      "externalConsole": false,
+      "osx": {
+        "program": "${workspaceRoot}/target/debug/${workspaceFolderBasename}"
+      },
+      "windows": {
+        "program": "${workspaceRoot}/target/debug/${workspaceFolderBasename}.exe"
+      },
+      "linux": {
+        "program": "${workspaceRoot}/target/debug/${workspaceFolderBasename}"
+      }
+    }
+  ]
+}
+

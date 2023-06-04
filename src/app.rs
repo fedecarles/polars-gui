@@ -3,9 +3,7 @@ use egui_extras::{Column, TableBuilder};
 use polars::prelude::*;
 use rfd::FileDialog;
 use std::cell::RefCell;
-use std::cell::RefMut;
 use std::fmt::Debug;
-use std::path::PathBuf;
 use std::rc::Rc;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -158,42 +156,42 @@ impl DataFrameContainer {
                                 ui.selectable_value(
                                     &mut self.filter.operation,
                                     FilterOps::EqualNum,
-                                    "=",
+                                    "EqualNum",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
                                     FilterOps::EqualStr,
-                                    "= ''",
+                                    "EqualStr",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
                                     FilterOps::GreaterThan,
-                                    ">",
+                                    "GreaterThan",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
                                     FilterOps::GreaterEqualThan,
-                                    ">=",
+                                    "GreaterEqualThan",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
                                     FilterOps::LowerThan,
-                                    "<",
+                                    "LowerThan",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
                                     FilterOps::LowerEqualThan,
-                                    "=<",
+                                    "LowerEqualThan",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
                                     FilterOps::IsNull,
-                                    "null",
+                                    "Null",
                                 );
                                 ui.selectable_value(
                                     &mut self.filter.operation,
                                     FilterOps::IsNotNull,
-                                    "not null",
+                                    "IsNotNull",
                                 );
                             });
                         ui.add(TextEdit::singleline(&mut self.filter.value).desired_width(100.0));
