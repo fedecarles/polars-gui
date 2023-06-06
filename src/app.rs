@@ -55,8 +55,6 @@ pub struct DataFrameContainer {
     is_open: bool,
     // filter
     filter: DataFrameFilter,
-    filter_action: FilterAction,
-    filtered_data: Option<DataFrame>,
     // aggregate
     aggregate: DataFrameAggregate,
 }
@@ -76,8 +74,6 @@ impl DataFrameContainer {
             data_display: false,
             is_open: true,
             filter: DataFrameFilter::default(),
-            filter_action: FilterAction::New,
-            filtered_data: None,
             aggregate: DataFrameAggregate::default(),
         }
     }
@@ -139,8 +135,12 @@ impl DataFrameContainer {
                 });
                 ui.collapsing("Filter", |ui| {
                     ui.horizontal(|ui| {
-                        ui.radio_value(&mut self.filter_action, FilterAction::New, "New");
-                        ui.radio_value(&mut self.filter_action, FilterAction::InPlace, "In Place");
+                        ui.radio_value(&mut self.filter.filter_action, FilterAction::New, "New");
+                        ui.radio_value(
+                            &mut self.filter.filter_action,
+                            FilterAction::InPlace,
+                            "In Place",
+                        );
                     });
                     ui.horizontal(|ui| {
                         ComboBox::from_label("is")
@@ -209,7 +209,7 @@ impl DataFrameContainer {
                             // TODO: Better handling of filtered dataframe
                             // TODO: Chained filtering
                             if f_df.is_ok() {
-                                self.filtered_data = f_df.ok();
+                                self.filter.filtered_data = f_df.ok();
                             } else {
                                 self.data = self.data.clone()
                             };
@@ -452,22 +452,26 @@ impl eframe::App for TemplateApp {
                     // existing container with the new one. The New option displays the filtered
                     // data in a new window.
                     // TODO: revise/re-factor filter functionality
-                    if frame_refcell.filtered_data.is_some() {
+                    if frame_refcell.filter.filtered_data.is_some() {
                         let filtered_title =
                             format!("filtered_{}{}", &frame_refcell.title, frames_vec.len());
 
                         let filtered_df = DataFrameContainer::new(
-                            frame_refcell.clone().filtered_data.unwrap_or_default(),
+                            frame_refcell
+                                .clone()
+                                .filter
+                                .filtered_data
+                                .unwrap_or_default(),
                             &filtered_title,
                         );
-                        match frame_refcell.filter_action {
+                        match frame_refcell.filter.filter_action {
                             FilterAction::New => {
                                 self.frames
                                     .as_mut()
                                     .unwrap()
                                     .push(Rc::new(RefCell::new(filtered_df)).to_owned());
                                 // cleanup. set original filtered data back to None
-                                frame_refcell.filtered_data = None;
+                                frame_refcell.filter.filtered_data = None;
                             }
                             FilterAction::InPlace => {
                                 frame_refcell.data = filtered_df.data.clone();
@@ -490,16 +494,8 @@ pub struct DataFrameFilter {
     column: String,
     operation: FilterOps,
     value: String,
-}
-
-impl DataFrameFilter {
-    fn new(&self, column: &str, operation: FilterOps, value: &str) -> Self {
-        Self {
-            column: String::from(column),
-            operation: operation,
-            value: String::from(value),
-        }
-    }
+    filter_action: FilterAction,
+    filtered_data: Option<DataFrame>,
 }
 
 impl Default for DataFrameFilter {
@@ -508,6 +504,8 @@ impl Default for DataFrameFilter {
             column: String::from(""),
             operation: FilterOps::EqualNum,
             value: String::from(""),
+            filter_action: FilterAction::New,
+            filtered_data: None,
         }
     }
 }
