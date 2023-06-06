@@ -53,9 +53,12 @@ pub struct DataFrameContainer {
     columns: Vec<String>,
     data_display: bool,
     is_open: bool,
+    // filter
     filter: DataFrameFilter,
     filter_action: FilterAction,
     filtered_data: Option<DataFrame>,
+    // aggregate
+    aggregate: DataFrameAggregate,
 }
 
 impl DataFrameContainer {
@@ -75,6 +78,7 @@ impl DataFrameContainer {
             filter: DataFrameFilter::default(),
             filter_action: FilterAction::New,
             filtered_data: None,
+            aggregate: DataFrameAggregate::default(),
         }
     }
 
@@ -211,6 +215,135 @@ impl DataFrameContainer {
                             };
                         }
                     })
+                });
+                ui.collapsing("Aggregate", |ui| {
+                    ui.label(egui::RichText::new("Group by:").text_style(egui::TextStyle::Heading));
+                    ui.horizontal(|ui| {
+                        ComboBox::new("Grp", "")
+                            .selected_text(&self.aggregate.grp_selection)
+                            .show_ui(ui, |ui| {
+                                for col in &self.columns {
+                                    ui.selectable_value(
+                                        &mut self.aggregate.grp_selection,
+                                        col.to_owned(),
+                                        col,
+                                    );
+                                }
+                            });
+                        if ui.button("Add").clicked() {
+                            if !self
+                                .aggregate
+                                .groupby
+                                .contains(&self.aggregate.grp_selection)
+                            {
+                                self.aggregate
+                                    .groupby
+                                    .push(self.aggregate.grp_selection.clone());
+                            }
+                        }
+                    });
+                    ui.label(format!("{:?}", &self.aggregate.groupby));
+                    ui.label(egui::RichText::new("Columns:").text_style(egui::TextStyle::Heading));
+                    ui.horizontal(|ui| {
+                        ComboBox::new("Agg", "")
+                            .selected_text(&self.aggregate.agg_selection)
+                            .show_ui(ui, |ui| {
+                                for col in &self.columns {
+                                    ui.selectable_value(
+                                        &mut self.aggregate.agg_selection,
+                                        col.to_owned(),
+                                        col,
+                                    );
+                                }
+                            });
+                        if ui.button("Add").clicked() {
+                            if !self
+                                .aggregate
+                                .aggcols
+                                .contains(&self.aggregate.agg_selection)
+                            {
+                                self.aggregate
+                                    .aggcols
+                                    .push(self.aggregate.agg_selection.clone());
+                            }
+                        }
+                    });
+                    ui.label(format!("{:?}", &self.aggregate.aggcols));
+                    ui.horizontal(|ui| {
+                        ui.radio_value(&mut self.aggregate.aggfunc, AggFunc::Count, "Count");
+                        ui.radio_value(&mut self.aggregate.aggfunc, AggFunc::Sum, "Sum");
+                        ui.radio_value(&mut self.aggregate.aggfunc, AggFunc::Mean, "Mean");
+                    });
+                    ui.horizontal(|ui| {
+                        ui.radio_value(&mut self.aggregate.aggfunc, AggFunc::Median, "Median");
+                        ui.radio_value(&mut self.aggregate.aggfunc, AggFunc::Min, "Min");
+                        ui.radio_value(&mut self.aggregate.aggfunc, AggFunc::Max, "Max");
+                    });
+
+                    if ui.button("Apply").clicked() {
+                        self.aggregate.display = true;
+                        let str_gp: Vec<&str> =
+                            self.aggregate.groupby.iter().map(|s| s.as_str()).collect();
+                        let str_agg: Vec<&str> =
+                            self.aggregate.aggcols.iter().map(|s| s.as_str()).collect();
+
+                        let aggdf = aggregate_dataframe(
+                            self.data.clone(),
+                            str_gp,
+                            str_agg,
+                            &self.aggregate.aggfunc,
+                        );
+                        if aggdf.is_ok() {
+                            self.aggregate.aggdata = Some(aggdf.unwrap_or_default());
+                        }
+                    }
+                    if self.aggregate.display {
+                        let binding = self.aggregate.aggdata.clone().unwrap();
+                        let window = Window::new(format!(
+                            "{}{}",
+                            String::from("Aggregation: "),
+                            &self.title
+                        ))
+                        .open(&mut self.aggregate.display);
+
+                        window.show(ctx, |ui| {
+                            let nr_cols = binding.width();
+                            let nr_rows = binding.height();
+                            let cols = binding.get_column_names();
+
+                            TableBuilder::new(ui)
+                                .column(Column::auto())
+                                .columns(Column::auto(), nr_cols)
+                                .striped(true)
+                                .resizable(true)
+                                .header(5.0, |mut header| {
+                                    header.col(|ui| {
+                                        ui.label(format!("{}", "Row"));
+                                    });
+                                    for head in &cols {
+                                        header.col(|ui| {
+                                            ui.heading(format!("{}", head));
+                                        });
+                                    }
+                                })
+                                .body(|body| {
+                                    body.rows(10.0, nr_rows, |row_index, mut row| {
+                                        row.col(|ui| {
+                                            ui.label(format!("{}", row_index));
+                                        });
+                                        for col in &cols {
+                                            row.col(|ui| {
+                                                if let Ok(column) = binding.column(col) {
+                                                    if let Ok(value) = column.get(row_index) {
+                                                        ui.label(format!("{}", value));
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    });
+                                });
+                        });
+                    }
                 });
             });
     }
@@ -387,41 +520,113 @@ enum FilterOps {
     IsNotNull,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+enum AggFunc {
+    Count,
+    Sum,
+    Mean,
+    Median,
+    Min,
+    Max,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DataFrameAggregate {
+    grp_selection: String,
+    agg_selection: String,
+    groupby: Vec<String>,
+    aggcols: Vec<String>,
+    aggfunc: AggFunc,
+    aggdata: Option<DataFrame>,
+    display: bool,
+}
+
+impl Default for DataFrameAggregate {
+    fn default() -> Self {
+        Self {
+            grp_selection: String::from(""),
+            agg_selection: String::from(""),
+            groupby: Vec::new(),
+            aggcols: Vec::new(),
+            aggfunc: AggFunc::Count,
+            aggdata: None,
+            display: false,
+        }
+    }
+}
+
+fn aggregate_dataframe(
+    df: DataFrame,
+    groupby: Vec<&str>,
+    aggcols: Vec<&str>,
+    aggfunc: &AggFunc,
+) -> Result<DataFrame, PolarsError> {
+    match aggfunc {
+        AggFunc::Count => df
+            .lazy()
+            .groupby(groupby)
+            .agg([cols(aggcols).count()])
+            .collect(),
+        AggFunc::Sum => df
+            .lazy()
+            .groupby(groupby)
+            .agg([cols(aggcols).sum()])
+            .collect(),
+        AggFunc::Mean => df
+            .lazy()
+            .groupby(groupby)
+            .agg([cols(aggcols).mean()])
+            .collect(),
+        AggFunc::Median => df
+            .lazy()
+            .groupby(groupby)
+            .agg([cols(aggcols).median()])
+            .collect(),
+        AggFunc::Min => df
+            .lazy()
+            .groupby(groupby)
+            .agg([cols(aggcols).min()])
+            .collect(),
+        AggFunc::Max => df
+            .lazy()
+            .groupby(groupby)
+            .agg([cols(aggcols).max()])
+            .collect(),
+    }
+}
+
 fn filter_dataframe(
     df: DataFrame,
     column: &str,
     operation: &FilterOps,
-    value: &String,
+    value: &str,
 ) -> Result<DataFrame, PolarsError> {
-    let dff = match operation {
+    let parsed_value = value.parse::<f64>().unwrap_or_default();
+    match operation {
         FilterOps::EqualNum => df
             .lazy()
-            .filter(col(column).eq(lit(value.parse::<f64>().unwrap_or_default())))
+            .filter(col(column).eq(lit(parsed_value)))
             .collect(),
-        FilterOps::EqualStr => df
-            .lazy()
-            .filter(col(column).eq(lit(value.parse::<String>().unwrap_or_default())))
-            .collect(),
+        FilterOps::EqualStr => df.lazy().filter(col(column).eq(value)).collect(),
         FilterOps::GreaterThan => df
             .lazy()
-            .filter(col(column).gt(lit(value.parse::<f64>().unwrap_or_default())))
+            .filter(col(column).gt(lit(parsed_value)))
             .collect(),
         FilterOps::GreaterEqualThan => df
             .lazy()
-            .filter(col(column).gt_eq(lit(value.parse::<f64>().unwrap_or_default())))
+            .filter(col(column).gt_eq(lit(parsed_value)))
             .collect(),
         FilterOps::LowerThan => df
             .lazy()
-            .filter(col(column).lt(lit(value.parse::<f64>().unwrap_or_default())))
+            .filter(col(column).lt(lit(parsed_value)))
             .collect(),
         FilterOps::LowerEqualThan => df
             .lazy()
-            .filter(col(column).lt_eq(lit(value.parse::<f64>().unwrap_or_default())))
+            .filter(col(column).lt_eq(lit(parsed_value)))
             .collect(),
         FilterOps::IsNull => df.lazy().filter(col(column).is_null()).collect(),
         FilterOps::IsNotNull => df.lazy().filter(col(column).is_not_null()).collect(),
-    };
-    dff
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
