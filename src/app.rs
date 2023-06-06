@@ -601,28 +601,32 @@ fn filter_dataframe(
     operation: &FilterOps,
     value: &str,
 ) -> Result<DataFrame, PolarsError> {
-    let parsed_value = value.parse::<f64>().unwrap_or_default();
+    let parsed_number = value.parse::<f64>().unwrap_or_default();
+    let parsed_string = value.parse::<String>().unwrap_or_default();
     match operation {
         FilterOps::EqualNum => df
             .lazy()
-            .filter(col(column).eq(lit(parsed_value)))
+            .filter(col(column).eq(lit(parsed_number)))
             .collect(),
-        FilterOps::EqualStr => df.lazy().filter(col(column).eq(value)).collect(),
+        FilterOps::EqualStr => df
+            .lazy()
+            .filter(col(column).eq(lit(parsed_string)))
+            .collect(),
         FilterOps::GreaterThan => df
             .lazy()
-            .filter(col(column).gt(lit(parsed_value)))
+            .filter(col(column).gt(lit(parsed_number)))
             .collect(),
         FilterOps::GreaterEqualThan => df
             .lazy()
-            .filter(col(column).gt_eq(lit(parsed_value)))
+            .filter(col(column).gt_eq(lit(parsed_number)))
             .collect(),
         FilterOps::LowerThan => df
             .lazy()
-            .filter(col(column).lt(lit(parsed_value)))
+            .filter(col(column).lt(lit(parsed_number)))
             .collect(),
         FilterOps::LowerEqualThan => df
             .lazy()
-            .filter(col(column).lt_eq(lit(parsed_value)))
+            .filter(col(column).lt_eq(lit(parsed_number)))
             .collect(),
         FilterOps::IsNull => df.lazy().filter(col(column).is_null()).collect(),
         FilterOps::IsNotNull => df.lazy().filter(col(column).is_not_null()).collect(),
