@@ -413,8 +413,11 @@ impl eframe::App for TemplateApp {
                 ui.menu_button("New", |ui| {
                     if ui.button("DataFrame").clicked() {
                         if let Some(path) = FileDialog::new().pick_file() {
-                            let df: DataFrame =
-                                CsvReader::from_path(&path).unwrap().finish().unwrap();
+                            let df: DataFrame = CsvReader::from_path(&path)
+                                .unwrap()
+                                .infer_schema(Some(10000))
+                                .finish()
+                                .unwrap();
                             let file_name: &str = &path.file_name().unwrap().to_str().unwrap();
                             if let Some(f) = &mut self.frames {
                                 f.push(Rc::new(RefCell::new(DataFrameContainer::new(
