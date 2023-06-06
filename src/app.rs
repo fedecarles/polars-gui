@@ -44,7 +44,7 @@ impl TemplateApp {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct DataFrameContainer {
     title: String,
     shape: (usize, usize),
@@ -269,6 +269,7 @@ impl DataFrameContainer {
                         }
                     });
                     ui.label(format!("{:?}", &self.aggregate.aggcols));
+                    ui.label(egui::RichText::new("Metric:").text_style(egui::TextStyle::Heading));
                     ui.horizontal(|ui| {
                         ui.radio_value(&mut self.aggregate.aggfunc, AggFunc::Count, "Count");
                         ui.radio_value(&mut self.aggregate.aggfunc, AggFunc::Sum, "Sum");
