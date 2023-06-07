@@ -49,7 +49,9 @@ pub struct DataFrameContainer {
     title: String,
     shape: (usize, usize),
     data: DataFrame,
+    //summary
     summary_data: DataFrame,
+    summary: DataFrameSummary,
     columns: Vec<String>,
     data_display: bool,
     is_open: bool,
@@ -66,6 +68,7 @@ impl DataFrameContainer {
             shape: df.shape(),
             data: df.clone(),
             summary_data: df.describe(None).unwrap_or_default(),
+            summary: DataFrameSummary::default(),
             columns: df
                 .get_column_names()
                 .iter()
@@ -84,8 +87,9 @@ impl DataFrameContainer {
         window
             .open(&mut self.is_open)
             .scroll2([true, true])
-            .resize(|r| r.max_size((1920.0, 1080.0)))
-            .resizable(true)
+            //.resize(|r| r.max_size((1920.0, 1080.0)))
+            .auto_sized()
+            .resizable(false)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("Shape: ");
@@ -98,40 +102,62 @@ impl DataFrameContainer {
                         self.data_display = !&self.data_display;
                     }
                 });
+                ui.horizontal(|ui| {
+                    ui.label("Summary: ");
+                    let btn = ui.button("View");
+                    if btn.clicked() {
+                        self.summary.display = !&self.summary.display;
+                        if self.summary.summary_data.is_none() {
+                            self.summary.summary_data = self.data.describe(None).ok();
+                        }
+                    }
+                    if self.summary.display {
+                        Window::new(format!("{}{}", String::from("Summary: "), &self.title))
+                            .open(&mut self.summary.display)
+                            .show(ctx, |ui| {
+                                let binding = self.summary.summary_data.clone().unwrap();
+                                let nr_cols = binding.width();
+                                let nr_rows = binding.height();
+                                let cols = binding.get_column_names();
+
+                                TableBuilder::new(ui)
+                                    .column(Column::auto())
+                                    .columns(Column::auto(), nr_cols)
+                                    .striped(true)
+                                    .resizable(true)
+                                    .header(5.0, |mut header| {
+                                        header.col(|ui| {
+                                            ui.label(format!("{}", "Row"));
+                                        });
+                                        for head in &cols {
+                                            header.col(|ui| {
+                                                ui.heading(format!("{}", head));
+                                            });
+                                        }
+                                    })
+                                    .body(|body| {
+                                        body.rows(10.0, nr_rows, |row_index, mut row| {
+                                            row.col(|ui| {
+                                                ui.label(format!("{}", row_index));
+                                            });
+                                            for col in &cols {
+                                                row.col(|ui| {
+                                                    if let Ok(column) = binding.column(col) {
+                                                        if let Ok(value) = column.get(row_index) {
+                                                            ui.label(format!("{}", value));
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        });
+                                    });
+                            });
+                    }
+                });
                 ui.collapsing("Columns", |ui| {
                     for c in &self.columns {
                         ui.label(c.to_owned());
                     }
-                });
-                ui.collapsing("Summary", |ui| {
-                    let nr_cols = self.summary_data.width();
-                    let nr_rows = self.summary_data.height();
-                    let cols = &self.summary_data.get_column_names();
-
-                    TableBuilder::new(ui)
-                        .columns(Column::auto(), nr_cols)
-                        .striped(true)
-                        .resizable(true)
-                        .header(5.0, |mut header| {
-                            for head in cols {
-                                header.col(|ui| {
-                                    ui.heading(format!("{}", head));
-                                });
-                            }
-                        })
-                        .body(|body| {
-                            body.rows(10.0, nr_rows, |row_index, mut row| {
-                                for col in cols {
-                                    row.col(|ui| {
-                                        if let Ok(column) = &self.summary_data.column(col) {
-                                            if let Ok(value) = column.get(row_index) {
-                                                ui.label(format!("{}", value));
-                                            }
-                                        }
-                                    });
-                                }
-                            });
-                        });
                 });
                 ui.collapsing("Filter", |ui| {
                     ui.horizontal(|ui| {
@@ -486,6 +512,21 @@ impl eframe::App for TemplateApp {
 
             egui::warn_if_debug_build(ui);
         });
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DataFrameSummary {
+    summary_data: Option<DataFrame>,
+    display: bool,
+}
+
+impl Default for DataFrameSummary {
+    fn default() -> Self {
+        Self {
+            summary_data: None,
+            display: false,
+        }
     }
 }
 
