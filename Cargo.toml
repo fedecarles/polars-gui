@@ -15,8 +15,13 @@ eframe = { version = "0.21.0", default-features = false, features = [
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
     "persistence",   # Enable restoring app state when restarting the app.
 ] }
-polars= { versio = "0.29.0", features=["rows", "describe", "lazy", "strings"]}
-rfd = { version = "0.11.3"}
+polars = { versio = "0.29.0", features = [
+    "rows",
+    "describe",
+    "lazy",
+    "strings",
+] }
+rfd = { version = "0.11.3" }
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }

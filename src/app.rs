@@ -60,6 +60,7 @@ pub struct DataFrameContainer {
     filter: DataFrameFilter,
     // aggregate
     aggregate: DataFrameAggregate,
+    melt: DataFrameMelt,
 }
 
 impl DataFrameContainer {
@@ -80,6 +81,7 @@ impl DataFrameContainer {
             show_datatypes: false,
             filter: DataFrameFilter::default(),
             aggregate: DataFrameAggregate::default(),
+            melt: DataFrameMelt::default(),
         }
     }
 
@@ -151,6 +153,11 @@ impl DataFrameContainer {
                         }
                         ui.end_row();
                     });
+                ui.add_space(15.0);
+                ui.label(
+                    egui::RichText::new("Data Transformations")
+                        .text_style(egui::TextStyle::Heading),
+                );
                 ui.collapsing("Filter", |ui| {
                     ui.horizontal(|ui| {
                         ui.radio_value(&mut self.filter.filter_action, FilterAction::New, "New");
@@ -325,6 +332,63 @@ impl DataFrameContainer {
                             });
                     }
                 });
+                ui.collapsing("Join", |ui| {});
+                ui.collapsing("Melt", |ui| {
+                    ui.label(egui::RichText::new("Id Vars:").text_style(egui::TextStyle::Heading));
+                    ComboBox::new("Idvars", "")
+                        .selected_text(&self.melt.id_selection)
+                        .show_ui(ui, |ui| {
+                            for col in &self.columns {
+                                ui.selectable_value(
+                                    &mut self.melt.id_selection,
+                                    col.to_owned(),
+                                    col,
+                                );
+                            }
+                        });
+                    if ui.button("Add").clicked() {
+                        if !self.melt.id_vars.contains(&self.melt.id_selection) {
+                            self.melt.id_vars.push(self.melt.id_selection.clone());
+                        }
+                    }
+                    ui.label(format!("{:?}", &self.melt.id_vars));
+                    ui.label(
+                        egui::RichText::new("Value Vars:").text_style(egui::TextStyle::Heading),
+                    );
+                    ComboBox::new("Valvars", "")
+                        .selected_text(&self.melt.val_selection)
+                        .show_ui(ui, |ui| {
+                            for col in &self.columns {
+                                ui.selectable_value(
+                                    &mut self.melt.val_selection,
+                                    col.to_owned(),
+                                    col,
+                                );
+                            }
+                        });
+                    if ui.button("Add").clicked() {
+                        if !self.melt.value_vars.contains(&self.melt.val_selection) {
+                            self.melt.value_vars.push(self.melt.val_selection.clone());
+                        }
+                    }
+                    ui.label(format!("{:?}", &self.melt.value_vars));
+                    if ui.button("Melt").clicked() {
+                        self.melt.display = true;
+                        let melted_df = self.data.melt(&self.melt.id_vars, &self.melt.value_vars);
+                        if melted_df.is_ok() {
+                            self.melt.meltdata = melted_df.ok();
+                        }
+                    }
+                    if self.melt.display {
+                        let binding = self.melt.meltdata.clone().unwrap_or_default();
+                        Window::new(format!("{}{}", String::from("Melt: "), &self.title))
+                            .open(&mut self.melt.display)
+                            .show(ctx, |ui| {
+                                display_dataframe(&binding, ui);
+                            });
+                    }
+                });
+                ui.collapsing("Concatenate", |ui| {});
             });
     }
 }
@@ -486,12 +550,35 @@ pub struct DataFrameAggregate {
 impl Default for DataFrameAggregate {
     fn default() -> Self {
         Self {
-            grp_selection: String::from(""),
-            agg_selection: String::from(""),
+            grp_selection: String::default(),
+            agg_selection: String::default(),
             groupby: Vec::new(),
             aggcols: Vec::new(),
             aggfunc: AggFunc::Count,
             aggdata: None,
+            display: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DataFrameMelt {
+    id_selection: String,
+    val_selection: String,
+    id_vars: Vec<String>,
+    value_vars: Vec<String>,
+    meltdata: Option<DataFrame>,
+    display: bool,
+}
+
+impl Default for DataFrameMelt {
+    fn default() -> Self {
+        Self {
+            id_selection: String::default(),
+            val_selection: String::default(),
+            id_vars: Vec::new(),
+            value_vars: Vec::new(),
+            meltdata: None,
             display: false,
         }
     }
