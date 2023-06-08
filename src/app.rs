@@ -104,6 +104,11 @@ impl DataFrameContainer {
                         if btn.clicked() {
                             self.data_display = !&self.data_display;
                         }
+                        if self.data_display {
+                            Window::new(format!("{}{}", String::from("Data: "), &self.title))
+                                .open(&mut self.data_display)
+                                .show(ctx, |ui| display_dataframe(&self.data, ui));
+                        }
                         ui.end_row();
                         ui.label("Summary: ");
                         let btn = ui.button("View");
@@ -114,47 +119,10 @@ impl DataFrameContainer {
                             }
                         }
                         if self.summary.display {
+                            let binding = self.summary.summary_data.clone().unwrap_or_default();
                             Window::new(format!("{}{}", String::from("Summary: "), &self.title))
                                 .open(&mut self.summary.display)
-                                .show(ctx, |ui| {
-                                    let binding = self.summary.summary_data.clone().unwrap();
-                                    let nr_cols = binding.width();
-                                    let nr_rows = binding.height();
-                                    let cols = binding.get_column_names();
-
-                                    TableBuilder::new(ui)
-                                        .column(Column::auto())
-                                        .columns(Column::auto(), nr_cols)
-                                        .striped(true)
-                                        .resizable(true)
-                                        .header(5.0, |mut header| {
-                                            header.col(|ui| {
-                                                ui.label(format!("{}", "Row"));
-                                            });
-                                            for head in &cols {
-                                                header.col(|ui| {
-                                                    ui.heading(format!("{}", head));
-                                                });
-                                            }
-                                        })
-                                        .body(|body| {
-                                            body.rows(10.0, nr_rows, |row_index, mut row| {
-                                                row.col(|ui| {
-                                                    ui.label(format!("{}", row_index));
-                                                });
-                                                for col in &cols {
-                                                    row.col(|ui| {
-                                                        if let Ok(column) = binding.column(col) {
-                                                            if let Ok(value) = column.get(row_index)
-                                                            {
-                                                                ui.label(format!("{}", value));
-                                                            }
-                                                        }
-                                                    });
-                                                }
-                                            });
-                                        });
-                                });
+                                .show(ctx, |ui| display_dataframe(&binding, ui));
                         }
                         ui.end_row();
                         ui.label("Columns:");
@@ -332,102 +300,15 @@ impl DataFrameContainer {
                         }
                     }
                     if self.aggregate.display {
-                        let binding = self.aggregate.aggdata.clone().unwrap();
-                        let window = Window::new(format!(
-                            "{}{}",
-                            String::from("Aggregation: "),
-                            &self.title
-                        ))
-                        .open(&mut self.aggregate.display);
-
-                        window.show(ctx, |ui| {
-                            let nr_cols = binding.width();
-                            let nr_rows = binding.height();
-                            let cols = binding.get_column_names();
-
-                            TableBuilder::new(ui)
-                                .column(Column::auto())
-                                .columns(Column::auto(), nr_cols)
-                                .striped(true)
-                                .resizable(true)
-                                .header(5.0, |mut header| {
-                                    header.col(|ui| {
-                                        ui.label(format!("{}", "Row"));
-                                    });
-                                    for head in &cols {
-                                        header.col(|ui| {
-                                            ui.heading(format!("{}", head));
-                                        });
-                                    }
-                                })
-                                .body(|body| {
-                                    body.rows(10.0, nr_rows, |row_index, mut row| {
-                                        row.col(|ui| {
-                                            ui.label(format!("{}", row_index));
-                                        });
-                                        for col in &cols {
-                                            row.col(|ui| {
-                                                if let Ok(column) = binding.column(col) {
-                                                    if let Ok(value) = column.get(row_index) {
-                                                        ui.label(format!("{}", value));
-                                                    }
-                                                }
-                                            });
-                                        }
-                                    });
-                                });
-                        });
+                        let binding = self.aggregate.aggdata.clone().unwrap_or_default();
+                        Window::new(format!("{}{}", String::from("Aggregation: "), &self.title))
+                            .open(&mut self.aggregate.display)
+                            .show(ctx, |ui| {
+                                display_dataframe(&binding, ui);
+                            });
                     }
                 });
             });
-    }
-
-    fn show_data(&mut self, ctx: &egui::Context) {
-        let window = Window::new(format!("{}{}", String::from("Data: "), &self.title))
-            .open(&mut self.data_display)
-            .resize(|r| r.max_size((1920.0, 1080.0)))
-            .resizable(true)
-            .scroll2([true, true])
-            .constrain(false)
-            .collapsible(true);
-
-        window.show(ctx, |ui| {
-            let nr_cols = self.data.width();
-            let nr_rows = self.data.height();
-            let cols = &self.data.get_column_names();
-
-            TableBuilder::new(ui)
-                .column(Column::auto())
-                .columns(Column::auto(), nr_cols)
-                .striped(true)
-                .resizable(true)
-                .header(5.0, |mut header| {
-                    header.col(|ui| {
-                        ui.label(format!("{}", "Row"));
-                    });
-                    for head in cols {
-                        header.col(|ui| {
-                            ui.heading(format!("{}", head));
-                        });
-                    }
-                })
-                .body(|body| {
-                    body.rows(10.0, nr_rows, |row_index, mut row| {
-                        row.col(|ui| {
-                            ui.label(format!("{}", row_index));
-                        });
-                        for col in cols {
-                            row.col(|ui| {
-                                if let Ok(column) = &self.data.column(col) {
-                                    if let Ok(value) = column.get(row_index) {
-                                        ui.label(format!("{}", value));
-                                    }
-                                }
-                            });
-                        }
-                    });
-                });
-        });
     }
 }
 
@@ -474,12 +355,6 @@ impl eframe::App for TemplateApp {
                 for frame_rc in frames_vec.iter() {
                     let mut frame_refcell = frame_rc.borrow_mut();
                     frame_refcell.show(ctx);
-                    if frame_refcell.data_display {
-                        frame_refcell.data_display = frame_refcell.data_display;
-                        if frame_refcell.data_display {
-                            frame_refcell.show_data(ctx)
-                        }
-                    }
 
                     // Filter creates a new DataFrameContainer. InPlace option updates the
                     // existing container with the new one. The New option displays the filtered
@@ -687,4 +562,42 @@ fn filter_dataframe(
 enum FilterAction {
     InPlace,
     New,
+}
+
+fn display_dataframe(df: &DataFrame, ui: &mut egui::Ui) {
+    let nr_cols = df.width();
+    let nr_rows = df.height();
+    let cols = &df.get_column_names();
+
+    TableBuilder::new(ui)
+        .column(Column::auto())
+        .columns(Column::auto(), nr_cols)
+        .striped(true)
+        .resizable(true)
+        .header(5.0, |mut header| {
+            header.col(|ui| {
+                ui.label(format!("{}", "Row"));
+            });
+            for head in cols {
+                header.col(|ui| {
+                    ui.heading(format!("{}", head));
+                });
+            }
+        })
+        .body(|body| {
+            body.rows(10.0, nr_rows, |row_index, mut row| {
+                row.col(|ui| {
+                    ui.label(format!("{}", row_index));
+                });
+                for col in cols {
+                    row.col(|ui| {
+                        if let Ok(column) = &df.column(col) {
+                            if let Ok(value) = column.get(row_index) {
+                                ui.label(format!("{}", value));
+                            }
+                        }
+                    });
+                }
+            });
+        });
 }

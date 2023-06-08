@@ -8,7 +8,7 @@ fn main() -> eframe::Result<()> {
     tracing_subscriber::fmt::init();
 
     let native_options = eframe::NativeOptions::default();
-    let app = Box::new(|cc| Box::new(polarsgui::TemplateApp::new(cc)));
+    let _app = Box::new(|cc| Box::new(polarsgui::TemplateApp::new(cc)));
 
     eframe::run_native(
         "eframe template",
