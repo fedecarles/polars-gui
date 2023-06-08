@@ -55,6 +55,7 @@ pub struct DataFrameContainer {
     columns: Vec<String>,
     data_display: bool,
     is_open: bool,
+    show_datatypes: bool,
     // filter
     filter: DataFrameFilter,
     // aggregate
@@ -76,6 +77,7 @@ impl DataFrameContainer {
                 .collect(),
             data_display: false,
             is_open: true,
+            show_datatypes: false,
             filter: DataFrameFilter::default(),
             aggregate: DataFrameAggregate::default(),
         }
@@ -122,18 +124,33 @@ impl DataFrameContainer {
                             let binding = self.summary.summary_data.clone().unwrap_or_default();
                             Window::new(format!("{}{}", String::from("Summary: "), &self.title))
                                 .open(&mut self.summary.display)
+                                .scroll2([true, true])
                                 .show(ctx, |ui| display_dataframe(&binding, ui));
                         }
                         ui.end_row();
-                        ui.label("Columns:");
-                        ui.button("View");
+                        ui.label("Data Types:");
+                        if ui.button("View").clicked() {
+                            self.show_datatypes = !self.show_datatypes;
+                        }
+                        if self.show_datatypes {
+                            let dtypes: Vec<String> = self
+                                .data
+                                .dtypes()
+                                .to_vec()
+                                .iter()
+                                .map(|d| d.to_string())
+                                .collect();
+                            let dtypes_df = df!(
+                                "Columns" => &self.columns,
+                                "Dtype" => dtypes.to_vec()
+                            )
+                            .unwrap_or_default();
+                            Window::new(format!("{}{}", String::from("Data Types: "), &self.title))
+                                .open(&mut self.show_datatypes)
+                                .show(ctx, |ui| display_dataframe(&dtypes_df, ui));
+                        }
                         ui.end_row();
                     });
-                ui.collapsing("Columns", |ui| {
-                    for c in &self.columns {
-                        ui.label(c.to_owned());
-                    }
-                });
                 ui.collapsing("Filter", |ui| {
                     ui.horizontal(|ui| {
                         ui.radio_value(&mut self.filter.filter_action, FilterAction::New, "New");
@@ -571,10 +588,10 @@ fn display_dataframe(df: &DataFrame, ui: &mut egui::Ui) {
 
     TableBuilder::new(ui)
         .column(Column::auto())
-        .columns(Column::auto(), nr_cols)
+        .columns(Column::auto().clip(true), nr_cols)
         .striped(true)
         .resizable(true)
-        .header(5.0, |mut header| {
+        .header(20.0, |mut header| {
             header.col(|ui| {
                 ui.label(format!("{}", "Row"));
             });
