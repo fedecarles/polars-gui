@@ -1,4 +1,4 @@
-use egui::{ComboBox, TextEdit, Window};
+use egui::{ComboBox, Grid, TextEdit, Window};
 use egui_extras::{Column, TableBuilder};
 use polars::prelude::*;
 use rfd::FileDialog;
@@ -91,69 +91,76 @@ impl DataFrameContainer {
             .auto_sized()
             .resizable(false)
             .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Shape: ");
-                    ui.label(String::from(format!("{:?}", &self.shape)));
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Data: ");
-                    let btn = ui.button("View");
-                    if btn.clicked() {
-                        self.data_display = !&self.data_display;
-                    }
-                });
-                ui.horizontal(|ui| {
-                    ui.label("Summary: ");
-                    let btn = ui.button("View");
-                    if btn.clicked() {
-                        self.summary.display = !&self.summary.display;
-                        if self.summary.summary_data.is_none() {
-                            self.summary.summary_data = self.data.describe(None).ok();
+                Grid::new("main_grid")
+                    .num_columns(2)
+                    .spacing([40.0, 4.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        ui.label("Shape: ");
+                        ui.label(String::from(format!("{:?}", &self.shape)));
+                        ui.end_row();
+                        ui.label("Data: ");
+                        let btn = ui.button("View");
+                        if btn.clicked() {
+                            self.data_display = !&self.data_display;
                         }
-                    }
-                    if self.summary.display {
-                        Window::new(format!("{}{}", String::from("Summary: "), &self.title))
-                            .open(&mut self.summary.display)
-                            .show(ctx, |ui| {
-                                let binding = self.summary.summary_data.clone().unwrap();
-                                let nr_cols = binding.width();
-                                let nr_rows = binding.height();
-                                let cols = binding.get_column_names();
+                        ui.end_row();
+                        ui.label("Summary: ");
+                        let btn = ui.button("View");
+                        if btn.clicked() {
+                            self.summary.display = !&self.summary.display;
+                            if self.summary.summary_data.is_none() {
+                                self.summary.summary_data = self.data.describe(None).ok();
+                            }
+                        }
+                        if self.summary.display {
+                            Window::new(format!("{}{}", String::from("Summary: "), &self.title))
+                                .open(&mut self.summary.display)
+                                .show(ctx, |ui| {
+                                    let binding = self.summary.summary_data.clone().unwrap();
+                                    let nr_cols = binding.width();
+                                    let nr_rows = binding.height();
+                                    let cols = binding.get_column_names();
 
-                                TableBuilder::new(ui)
-                                    .column(Column::auto())
-                                    .columns(Column::auto(), nr_cols)
-                                    .striped(true)
-                                    .resizable(true)
-                                    .header(5.0, |mut header| {
-                                        header.col(|ui| {
-                                            ui.label(format!("{}", "Row"));
-                                        });
-                                        for head in &cols {
+                                    TableBuilder::new(ui)
+                                        .column(Column::auto())
+                                        .columns(Column::auto(), nr_cols)
+                                        .striped(true)
+                                        .resizable(true)
+                                        .header(5.0, |mut header| {
                                             header.col(|ui| {
-                                                ui.heading(format!("{}", head));
+                                                ui.label(format!("{}", "Row"));
                                             });
-                                        }
-                                    })
-                                    .body(|body| {
-                                        body.rows(10.0, nr_rows, |row_index, mut row| {
-                                            row.col(|ui| {
-                                                ui.label(format!("{}", row_index));
-                                            });
-                                            for col in &cols {
-                                                row.col(|ui| {
-                                                    if let Ok(column) = binding.column(col) {
-                                                        if let Ok(value) = column.get(row_index) {
-                                                            ui.label(format!("{}", value));
-                                                        }
-                                                    }
+                                            for head in &cols {
+                                                header.col(|ui| {
+                                                    ui.heading(format!("{}", head));
                                                 });
                                             }
+                                        })
+                                        .body(|body| {
+                                            body.rows(10.0, nr_rows, |row_index, mut row| {
+                                                row.col(|ui| {
+                                                    ui.label(format!("{}", row_index));
+                                                });
+                                                for col in &cols {
+                                                    row.col(|ui| {
+                                                        if let Ok(column) = binding.column(col) {
+                                                            if let Ok(value) = column.get(row_index)
+                                                            {
+                                                                ui.label(format!("{}", value));
+                                                            }
+                                                        }
+                                                    });
+                                                }
+                                            });
                                         });
-                                    });
-                            });
-                    }
-                });
+                                });
+                        }
+                        ui.end_row();
+                        ui.label("Columns:");
+                        ui.button("View");
+                        ui.end_row();
+                    });
                 ui.collapsing("Columns", |ui| {
                     for c in &self.columns {
                         ui.label(c.to_owned());
