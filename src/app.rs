@@ -17,6 +17,7 @@ pub struct TemplateApp {
     value: f32,
     #[serde(skip)]
     frames: Option<Vec<Rc<RefCell<DataFrameContainer>>>>,
+    titles: Vec<String>,
 }
 
 impl Default for TemplateApp {
@@ -25,6 +26,7 @@ impl Default for TemplateApp {
             label: "Polars GUI".to_owned(),
             value: 0.1,
             frames: Some(Vec::new()),
+            titles: Vec::new(),
         }
     }
 }
@@ -60,7 +62,10 @@ pub struct DataFrameContainer {
     filter: DataFrameFilter,
     // aggregate
     aggregate: DataFrameAggregate,
+    // melt
     melt: DataFrameMelt,
+    // join
+    join: DataFrameJoin,
 }
 
 impl DataFrameContainer {
@@ -82,6 +87,7 @@ impl DataFrameContainer {
             filter: DataFrameFilter::default(),
             aggregate: DataFrameAggregate::default(),
             melt: DataFrameMelt::default(),
+            join: DataFrameJoin::default(),
         }
     }
 
@@ -332,7 +338,20 @@ impl DataFrameContainer {
                             });
                     }
                 });
-                ui.collapsing("Join", |ui| {});
+                ui.collapsing("Join", |ui| {
+                    ComboBox::new("dfs", "")
+                        .selected_text(&self.join.df_selection)
+                        .show_ui(ui, |ui| {
+                            for col in &self.join.df_list {
+                                ui.selectable_value(
+                                    &mut self.join.df_selection,
+                                    col.to_owned(),
+                                    col,
+                                );
+                            }
+                        });
+                    ui.label(format!("{:?}", &self.join.df_list));
+                });
                 ui.collapsing("Melt", |ui| {
                     ui.label(egui::RichText::new("Id Vars:").text_style(egui::TextStyle::Heading));
                     ComboBox::new("Idvars", "")
@@ -418,7 +437,8 @@ impl eframe::App for TemplateApp {
                             if let Some(f) = &mut self.frames {
                                 f.push(Rc::new(RefCell::new(DataFrameContainer::new(
                                     df, file_name,
-                                ))))
+                                ))));
+                                self.titles.push(file_name.to_string());
                             }
                         }
                     }
@@ -435,6 +455,8 @@ impl eframe::App for TemplateApp {
             if let Some(frames_vec) = &mut self.frames.clone() {
                 for frame_rc in frames_vec.iter() {
                     let mut frame_refcell = frame_rc.borrow_mut();
+
+                    frame_refcell.join.df_list = self.titles.clone();
                     frame_refcell.show(ctx);
 
                     // Filter creates a new DataFrameContainer. InPlace option updates the
@@ -579,6 +601,31 @@ impl Default for DataFrameMelt {
             id_vars: Vec::new(),
             value_vars: Vec::new(),
             meltdata: None,
+            display: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DataFrameJoin {
+    df_selection: String,
+    df_list: Vec<String>,
+    left_on: String,
+    right_on: String,
+    how: String,
+    joindata: Option<DataFrame>,
+    display: bool,
+}
+
+impl Default for DataFrameJoin {
+    fn default() -> Self {
+        Self {
+            df_selection: String::default(),
+            df_list: Vec::new(),
+            left_on: String::default(),
+            right_on: String::default(),
+            how: String::default(),
+            joindata: None,
             display: false,
         }
     }
