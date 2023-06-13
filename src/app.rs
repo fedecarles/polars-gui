@@ -2,8 +2,9 @@ use egui::{ComboBox, Grid, TextEdit, Window};
 use egui_extras::{Column, TableBuilder};
 use polars::prelude::*;
 use rfd::FileDialog;
-use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt::Debug;
+use std::hash::Hash;
 use std::rc::Rc;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -16,8 +17,10 @@ pub struct TemplateApp {
     #[serde(skip)]
     value: f32,
     #[serde(skip)]
-    frames: Option<Vec<Rc<RefCell<DataFrameContainer>>>>,
+    //frames: Option<Vec<Rc<RefCell<DataFrameContainer>>>>,
+    frames: Vec<HashMap<String, DataFrameContainer>>,
     titles: Vec<String>,
+    df_cols: HashMap<String, Vec<String>>,
 }
 
 impl Default for TemplateApp {
@@ -25,8 +28,9 @@ impl Default for TemplateApp {
         Self {
             label: "Polars GUI".to_owned(),
             value: 0.1,
-            frames: Some(Vec::new()),
+            frames: Vec::new(),
             titles: Vec::new(),
+            df_cols: HashMap::default(),
         }
     }
 }
@@ -39,9 +43,9 @@ impl TemplateApp {
 
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
+        //if let Some(storage) = cc.storage {
+        //    return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+        //}
         Default::default()
     }
 }
@@ -71,7 +75,7 @@ pub struct DataFrameContainer {
 impl DataFrameContainer {
     fn new(df: DataFrame, title: &str) -> Self {
         Self {
-            title: String::from(format!("{}{}", String::from("🗖 "), String::from(title))),
+            title: String::from(format!("{}", String::from(title))),
             shape: df.shape(),
             data: df.clone(),
             summary_data: df.describe(None).unwrap_or_default(),
@@ -92,7 +96,7 @@ impl DataFrameContainer {
     }
 
     fn show(&mut self, ctx: &egui::Context) {
-        let window = Window::new(&self.title);
+        let window = Window::new(format!("🗖 {}", &self.title));
 
         window
             .open(&mut self.is_open)
@@ -350,7 +354,39 @@ impl DataFrameContainer {
                                 );
                             }
                         });
-                    ui.label(format!("{:?}", &self.join.df_list));
+                    ComboBox::new("left_on", "")
+                        .selected_text(&self.join.left_on_selection)
+                        .show_ui(ui, |ui| {
+                            for col in &self.columns {
+                                ui.selectable_value(
+                                    &mut self.join.left_on_selection,
+                                    col.to_owned(),
+                                    col,
+                                );
+                            }
+                        });
+                    ComboBox::new("right_on", "")
+                        .selected_text(&self.join.right_on_selection)
+                        .show_ui(ui, |ui| {
+                            for col in &self.join.right_on_cols {
+                                ui.selectable_value(
+                                    &mut self.join.right_on_selection,
+                                    col.to_owned(),
+                                    col,
+                                );
+                            }
+                        });
+                    if ui.button("Apply").clicked() {
+                        self.join.display = !self.join.display
+                    }
+                    if self.join.display {
+                        let binding = self.join.joindata.clone().unwrap_or_default();
+                        Window::new(format!("{}{}", String::from("Aggregation: "), &self.title))
+                            .open(&mut self.join.display)
+                            .show(ctx, |ui| {
+                                display_dataframe(&binding, ui);
+                            });
+                    }
                 });
                 ui.collapsing("Melt", |ui| {
                     ui.label(egui::RichText::new("Id Vars:").text_style(egui::TextStyle::Heading));
@@ -434,12 +470,20 @@ impl eframe::App for TemplateApp {
                                 .finish()
                                 .unwrap();
                             let file_name: &str = &path.file_name().unwrap().to_str().unwrap();
-                            if let Some(f) = &mut self.frames {
-                                f.push(Rc::new(RefCell::new(DataFrameContainer::new(
-                                    df, file_name,
-                                ))));
-                                self.titles.push(file_name.to_string());
-                            }
+                            let mut hash = HashMap::new();
+                            hash.insert(
+                                file_name.to_string(),
+                                DataFrameContainer::new(df.clone(), file_name),
+                            );
+                            self.frames.push(hash);
+                            let cols = df
+                                .clone()
+                                .get_column_names()
+                                .iter()
+                                .map(|c| c.to_string())
+                                .collect();
+                            self.df_cols.insert(String::from(file_name), cols);
+                            self.titles.push(file_name.to_string());
                         }
                     }
                 });
@@ -452,11 +496,26 @@ impl eframe::App for TemplateApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(frames_vec) = &mut self.frames.clone() {
-                for frame_rc in frames_vec.iter() {
-                    let mut frame_refcell = frame_rc.borrow_mut();
+            let mut temp_frames = Vec::new(); // Temporary vector to hold the filtered frames
+            let mut temp_joins = self.frames.clone();
 
+            for map in self.frames.iter_mut() {
+                for (key, val) in map {
+                    println!("{:?}", key);
+                    let frame_refcell = val;
+                    // Join requires the selection of another DataFrameContainer in the frames list
+                    // and the mapped columns stored in df_cols.
                     frame_refcell.join.df_list = self.titles.clone();
+                    let df_cols = self.df_cols.get(&frame_refcell.join.df_selection);
+
+                    if df_cols.is_some() {
+                        frame_refcell.join.right_on_cols =
+                            df_cols.unwrap_or(&Vec::new()).to_owned();
+                    }
+
+                    let x = get_container(&mut temp_joins, &frame_refcell.join.df_selection);
+                    println!("{:?}", x);
+
                     frame_refcell.show(ctx);
 
                     // Filter creates a new DataFrameContainer. InPlace option updates the
@@ -464,9 +523,7 @@ impl eframe::App for TemplateApp {
                     // data in a new window.
                     // TODO: revise/re-factor filter functionality
                     if frame_refcell.filter.filtered_data.is_some() {
-                        let filtered_title =
-                            format!("filtered_{}{}", &frame_refcell.title, frames_vec.len());
-
+                        let filtered_title = format!("filtered_{}{}", &frame_refcell.title, "test");
                         let filtered_df = DataFrameContainer::new(
                             frame_refcell
                                 .clone()
@@ -477,10 +534,13 @@ impl eframe::App for TemplateApp {
                         );
                         match frame_refcell.filter.filter_action {
                             FilterAction::New => {
-                                self.frames
-                                    .as_mut()
-                                    .unwrap()
-                                    .push(Rc::new(RefCell::new(filtered_df)).to_owned());
+                                let mut filter_hash = HashMap::new();
+                                filter_hash.insert(
+                                    format!("filtered_{}", &frame_refcell.title),
+                                    filtered_df,
+                                );
+                                //self.frames.push(filter_hash);
+                                temp_frames.push(filter_hash);
                                 // cleanup. set original filtered data back to None
                                 frame_refcell.filter.filtered_data = None;
                             }
@@ -494,6 +554,8 @@ impl eframe::App for TemplateApp {
                     }
                 }
             }
+            // Push the filtered frames into self.frames after the nested loops
+            self.frames.extend(temp_frames);
 
             egui::warn_if_debug_build(ui);
         });
@@ -610,11 +672,13 @@ impl Default for DataFrameMelt {
 pub struct DataFrameJoin {
     df_selection: String,
     df_list: Vec<String>,
-    left_on: String,
-    right_on: String,
+    left_on_selection: String,
+    right_on_selection: String,
+    right_on_cols: Vec<String>,
     how: String,
     joindata: Option<DataFrame>,
     display: bool,
+    inplace: bool,
 }
 
 impl Default for DataFrameJoin {
@@ -622,11 +686,13 @@ impl Default for DataFrameJoin {
         Self {
             df_selection: String::default(),
             df_list: Vec::new(),
-            left_on: String::default(),
-            right_on: String::default(),
+            left_on_selection: String::default(),
+            right_on_selection: String::default(),
+            right_on_cols: Vec::new(),
             how: String::default(),
             joindata: None,
             display: false,
+            inplace: false,
         }
     }
 }
@@ -751,4 +817,15 @@ fn display_dataframe(df: &DataFrame, ui: &mut egui::Ui) {
                 }
             });
         });
+}
+
+fn get_container(
+    containers: &mut Vec<HashMap<String, DataFrameContainer>>,
+    title: &str,
+) -> Option<DataFrameContainer> {
+    println!("{}", title);
+    for map in containers {
+        map.get(title);
+    }
+    None
 }
