@@ -4,8 +4,6 @@ use polars::prelude::*;
 use rfd::FileDialog;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::hash::Hash;
-use std::rc::Rc;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
@@ -56,7 +54,6 @@ pub struct DataFrameContainer {
     shape: (usize, usize),
     data: DataFrame,
     //summary
-    summary_data: DataFrame,
     summary: DataFrameSummary,
     columns: Vec<String>,
     data_display: bool,
@@ -78,7 +75,6 @@ impl DataFrameContainer {
             title: String::from(format!("{}", String::from(title))),
             shape: df.shape(),
             data: df.clone(),
-            summary_data: df.describe(None).unwrap_or_default(),
             summary: DataFrameSummary::default(),
             columns: df
                 .get_column_names()
@@ -381,7 +377,7 @@ impl DataFrameContainer {
                     }
                     if self.join.display {
                         let binding = self.join.joindata.clone().unwrap_or_default();
-                        Window::new(format!("{}{}", String::from("Aggregation: "), &self.title))
+                        Window::new(format!("{}{}", String::from("Merged: "), &self.title))
                             .open(&mut self.join.display)
                             .show(ctx, |ui| {
                                 display_dataframe(&binding, ui);
@@ -501,7 +497,6 @@ impl eframe::App for TemplateApp {
 
             for map in self.frames.iter_mut() {
                 for (key, val) in map {
-                    println!("{:?}", key);
                     let frame_refcell = val;
                     // Join requires the selection of another DataFrameContainer in the frames list
                     // and the mapped columns stored in df_cols.
@@ -513,8 +508,17 @@ impl eframe::App for TemplateApp {
                             df_cols.unwrap_or(&Vec::new()).to_owned();
                     }
 
-                    let x = get_container(&mut temp_joins, &frame_refcell.join.df_selection);
-                    println!("{:?}", x);
+                    //let df = &frame_refcell.data;
+                    //frame_refcell.join.joindata = df
+                    //    .join(
+                    //        &join_df.unwrap().data,
+                    //        [&frame_refcell.join.left_on_selection],
+                    //        [&frame_refcell.join.right_on_selection],
+                    //        JoinType::Inner,
+                    //        None,
+                    //    )
+                    //    .ok();
+                    //println!("{:?}", frame_refcell.join.joindata);
 
                     frame_refcell.show(ctx);
 
@@ -547,8 +551,8 @@ impl eframe::App for TemplateApp {
                             FilterAction::InPlace => {
                                 frame_refcell.data = filtered_df.data.clone();
                                 frame_refcell.shape = filtered_df.data.shape().clone();
-                                frame_refcell.summary_data =
-                                    filtered_df.data.clone().describe(None).unwrap_or_default();
+                                frame_refcell.summary.summary_data =
+                                    filtered_df.data.clone().describe(None).ok();
                             }
                         }
                     }
@@ -556,6 +560,39 @@ impl eframe::App for TemplateApp {
             }
             // Push the filtered frames into self.frames after the nested loops
             self.frames.extend(temp_frames);
+
+            for map in &self.frames {
+                for (key, val) in map.clone() {
+                    let mut frame_refcell = val;
+                    // Join requires the selection of another DataFrameContainer in the frames list
+                    // and the mapped columns stored in df_cols.
+                    if frame_refcell.join.display {
+                        if !frame_refcell.join.df_selection.is_empty() {
+                            let join_df =
+                                get_container(&temp_joins, &frame_refcell.join.df_selection);
+                            if let Some(j_df) = join_df {
+                                println!("Join {:?}", key);
+                                let df = &frame_refcell.data;
+                                frame_refcell.join.joindata = df
+                                    .join(
+                                        &j_df.data,
+                                        [&frame_refcell.join.left_on_selection],
+                                        [&frame_refcell.join.right_on_selection],
+                                        JoinType::Inner,
+                                        None,
+                                    )
+                                    .ok();
+                                println!("Join Data {:?}", frame_refcell.join.joindata);
+                            } else {
+                                println!(
+                                    "Main DF: {:?} - Join DF {:?}",
+                                    frame_refcell.title, "none"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
 
             egui::warn_if_debug_build(ui);
         });
@@ -820,12 +857,13 @@ fn display_dataframe(df: &DataFrame, ui: &mut egui::Ui) {
 }
 
 fn get_container(
-    containers: &mut Vec<HashMap<String, DataFrameContainer>>,
+    containers: &Vec<HashMap<String, DataFrameContainer>>,
     title: &str,
 ) -> Option<DataFrameContainer> {
-    println!("{}", title);
     for map in containers {
-        map.get(title);
+        if let Some(container) = map.get(title) {
+            return Some(container.clone());
+        }
     }
     None
 }
