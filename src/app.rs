@@ -805,12 +805,6 @@ fn filter_dataframe(
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-enum FilterAction {
-    InPlace,
-    New,
-}
-
 fn display_dataframe(df: &DataFrame, ui: &mut egui::Ui) {
     let nr_cols = df.width();
     let nr_rows = df.height();
