@@ -166,12 +166,8 @@ impl DataFrameContainer {
                 );
                 ui.collapsing("Filter", |ui| {
                     ui.horizontal(|ui| {
-                        ui.radio_value(&mut self.filter.filter_action, FilterAction::New, "New");
-                        ui.radio_value(
-                            &mut self.filter.filter_action,
-                            FilterAction::InPlace,
-                            "In Place",
-                        );
+                        ui.radio_value(&mut self.filter.inplace, false, "New");
+                        ui.radio_value(&mut self.filter.inplace, true, "In Place");
                     });
                     ui.horizontal(|ui| {
                         ComboBox::from_label("is")
@@ -516,8 +512,8 @@ impl eframe::App for TemplateApp {
                                 .unwrap_or_default(),
                             &filtered_title,
                         );
-                        match frame_refcell.filter.filter_action {
-                            FilterAction::New => {
+                        match frame_refcell.filter.inplace {
+                            false => {
                                 let mut filter_hash = HashMap::new();
                                 filter_hash.insert(
                                     format!("filtered_{}", &frame_refcell.title),
@@ -528,7 +524,7 @@ impl eframe::App for TemplateApp {
                                 // cleanup. set original filtered data back to None
                                 frame_refcell.filter.filtered_data = None;
                             }
-                            FilterAction::InPlace => {
+                            true => {
                                 frame_refcell.data = filtered_df.data.clone();
                                 frame_refcell.shape = filtered_df.data.shape().clone();
                                 frame_refcell.summary.summary_data =
@@ -616,7 +612,7 @@ pub struct DataFrameFilter {
     column: String,
     operation: FilterOps,
     value: String,
-    filter_action: FilterAction,
+    inplace: bool,
     filtered_data: Option<DataFrame>,
 }
 
@@ -626,7 +622,7 @@ impl Default for DataFrameFilter {
             column: String::from(""),
             operation: FilterOps::EqualNum,
             value: String::from(""),
-            filter_action: FilterAction::New,
+            inplace: false,
             filtered_data: None,
         }
     }
@@ -863,33 +859,4 @@ fn get_container(
         }
     }
     None
-}
-
-fn join_dataframes(frames: &Vec<HashMap<String, DataFrameContainer>>) {
-    for map in frames {
-        for (key, val) in map.clone() {
-            let mut frame_refcell = val;
-            if frame_refcell.join.join {
-                if !frame_refcell.join.df_selection.is_empty() {
-                    let join_df = get_container(&frames, &frame_refcell.join.df_selection);
-                    if let Some(j_df) = join_df {
-                        println!("Join {:?}", key);
-                        let df = &frame_refcell.data;
-                        frame_refcell.join.joindata = df
-                            .join(
-                                &j_df.data,
-                                [&frame_refcell.join.left_on_selection],
-                                [&frame_refcell.join.right_on_selection],
-                                JoinType::Inner,
-                                None,
-                            )
-                            .ok();
-                        println!("Join Data {:?}", frame_refcell.join.joindata);
-                    } else {
-                        println!("Main DF: {:?} - Join DF {:?}", frame_refcell.title, "none");
-                    }
-                }
-            }
-        }
-    }
 }
