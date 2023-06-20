@@ -15,7 +15,6 @@ pub struct TemplateApp {
     #[serde(skip)]
     value: f32,
     #[serde(skip)]
-    //frames: Option<Vec<Rc<RefCell<DataFrameContainer>>>>,
     frames: Vec<HashMap<String, DataFrameContainer>>,
     titles: Vec<String>,
     df_cols: HashMap<String, Vec<String>>,
@@ -233,8 +232,6 @@ impl DataFrameContainer {
                                 &self.filter.operation.clone(),
                                 &self.filter.value.clone(),
                             );
-                            // TODO: Better handling of filtered dataframe
-                            // TODO: Chained filtering
                             if f_df.is_ok() {
                                 self.filter.filtered_data = f_df.ok();
                             } else {
