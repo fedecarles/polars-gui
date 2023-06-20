@@ -312,7 +312,7 @@ impl DataFrameContainer {
                         ui.radio_value(&mut self.aggregate.aggfunc, AggFunc::Max, "Max");
                     });
 
-                    if ui.button("Apply").clicked() {
+                    if ui.button("Aggregate").clicked() {
                         self.aggregate.display = true;
                         let str_gp: Vec<&str> =
                             self.aggregate.groupby.iter().map(|s| s.as_str()).collect();
@@ -339,6 +339,10 @@ impl DataFrameContainer {
                     }
                 });
                 ui.collapsing("Join", |ui| {
+                    ui.horizontal(|ui| {
+                        ui.radio_value(&mut self.join.inplace, false, "New");
+                        ui.radio_value(&mut self.join.inplace, true, "In Place");
+                    });
                     ComboBox::new("dfs", "")
                         .selected_text(&self.join.df_selection)
                         .show_ui(ui, |ui| {
@@ -372,16 +376,14 @@ impl DataFrameContainer {
                                 );
                             }
                         });
-                    if ui.button("Apply").clicked() {
-                        self.join.display = !self.join.display
-                    }
-                    if self.join.display {
-                        let binding = self.join.joindata.clone().unwrap_or_default();
-                        Window::new(format!("{}{}", String::from("Merged: "), &self.title))
-                            .open(&mut self.join.display)
-                            .show(ctx, |ui| {
-                                display_dataframe(&binding, ui);
-                            });
+                    ui.horizontal(|ui| {
+                        ui.radio_value(&mut self.join.how, JoinType::Inner, "Inner");
+                        ui.radio_value(&mut self.join.how, JoinType::Left, "Left");
+                        ui.radio_value(&mut self.join.how, JoinType::Outer, "Outer");
+                        ui.radio_value(&mut self.join.how, JoinType::Cross, "Cross");
+                    });
+                    if ui.button("Join").clicked() {
+                        self.join.join = !self.join.join
                     }
                 });
                 ui.collapsing("Melt", |ui| {
@@ -493,33 +495,11 @@ impl eframe::App for TemplateApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             let mut temp_frames = Vec::new(); // Temporary vector to hold the filtered frames
-            let mut temp_joins = self.frames.clone();
+            let temp_joins = self.frames.clone();
 
             for map in self.frames.iter_mut() {
                 for (key, val) in map {
                     let frame_refcell = val;
-                    // Join requires the selection of another DataFrameContainer in the frames list
-                    // and the mapped columns stored in df_cols.
-                    frame_refcell.join.df_list = self.titles.clone();
-                    let df_cols = self.df_cols.get(&frame_refcell.join.df_selection);
-
-                    if df_cols.is_some() {
-                        frame_refcell.join.right_on_cols =
-                            df_cols.unwrap_or(&Vec::new()).to_owned();
-                    }
-
-                    //let df = &frame_refcell.data;
-                    //frame_refcell.join.joindata = df
-                    //    .join(
-                    //        &join_df.unwrap().data,
-                    //        [&frame_refcell.join.left_on_selection],
-                    //        [&frame_refcell.join.right_on_selection],
-                    //        JoinType::Inner,
-                    //        None,
-                    //    )
-                    //    .ok();
-                    //println!("{:?}", frame_refcell.join.joindata);
-
                     frame_refcell.show(ctx);
 
                     // Filter creates a new DataFrameContainer. InPlace option updates the
@@ -556,43 +536,60 @@ impl eframe::App for TemplateApp {
                             }
                         }
                     }
-                }
-            }
-            // Push the filtered frames into self.frames after the nested loops
-            self.frames.extend(temp_frames);
 
-            for map in &self.frames {
-                for (key, val) in map.clone() {
-                    let mut frame_refcell = val;
                     // Join requires the selection of another DataFrameContainer in the frames list
                     // and the mapped columns stored in df_cols.
-                    if frame_refcell.join.display {
+                    frame_refcell.join.df_list = self.titles.clone();
+                    let df_cols = self.df_cols.get(&frame_refcell.join.df_selection);
+
+                    if df_cols.is_some() {
+                        frame_refcell.join.right_on_cols =
+                            df_cols.unwrap_or(&Vec::new()).to_owned();
+                    }
+
+                    if frame_refcell.join.join {
                         if !frame_refcell.join.df_selection.is_empty() {
                             let join_df =
                                 get_container(&temp_joins, &frame_refcell.join.df_selection);
                             if let Some(j_df) = join_df {
-                                println!("Join {:?}", key);
                                 let df = &frame_refcell.data;
-                                frame_refcell.join.joindata = df
-                                    .join(
-                                        &j_df.data,
-                                        [&frame_refcell.join.left_on_selection],
-                                        [&frame_refcell.join.right_on_selection],
-                                        JoinType::Inner,
-                                        None,
-                                    )
-                                    .ok();
-                                println!("Join Data {:?}", frame_refcell.join.joindata);
-                            } else {
-                                println!(
-                                    "Main DF: {:?} - Join DF {:?}",
-                                    frame_refcell.title, "none"
+                                let joined_df = df.join(
+                                    &j_df.data,
+                                    [&frame_refcell.join.left_on_selection],
+                                    [&frame_refcell.join.right_on_selection],
+                                    frame_refcell.join.how.clone(),
+                                    None,
                                 );
+                                if let Ok(joined) = joined_df {
+                                    let joined_title = format!("joined_{}", frame_refcell.title);
+                                    let joined_container =
+                                        DataFrameContainer::new(joined.clone(), &joined_title);
+                                    match frame_refcell.join.inplace {
+                                        false => {
+                                            let mut join_hash = HashMap::new();
+                                            join_hash.insert(joined_title, joined_container);
+                                            temp_frames.push(join_hash);
+                                            // cleanup. set original filtered data back to None
+                                            frame_refcell.filter.filtered_data = None;
+                                        }
+                                        true => {
+                                            frame_refcell.data = joined.clone();
+                                            frame_refcell.shape = joined.shape();
+                                            frame_refcell.summary.summary_data =
+                                                joined.describe(None).ok();
+                                        }
+                                    }
+                                }
+                                frame_refcell.join.join = false;
+                            } else {
+                                println!("DataFrameContainer could not be found");
                             }
                         }
                     }
                 }
             }
+            // Push the filtered frames into self.frames after the nested loops
+            self.frames.extend(temp_frames);
 
             egui::warn_if_debug_build(ui);
         });
@@ -712,9 +709,9 @@ pub struct DataFrameJoin {
     left_on_selection: String,
     right_on_selection: String,
     right_on_cols: Vec<String>,
-    how: String,
+    how: JoinType,
     joindata: Option<DataFrame>,
-    display: bool,
+    join: bool,
     inplace: bool,
 }
 
@@ -726,9 +723,9 @@ impl Default for DataFrameJoin {
             left_on_selection: String::default(),
             right_on_selection: String::default(),
             right_on_cols: Vec::new(),
-            how: String::default(),
+            how: JoinType::Inner,
             joindata: None,
-            display: false,
+            join: false,
             inplace: false,
         }
     }
@@ -866,4 +863,33 @@ fn get_container(
         }
     }
     None
+}
+
+fn join_dataframes(frames: &Vec<HashMap<String, DataFrameContainer>>) {
+    for map in frames {
+        for (key, val) in map.clone() {
+            let mut frame_refcell = val;
+            if frame_refcell.join.join {
+                if !frame_refcell.join.df_selection.is_empty() {
+                    let join_df = get_container(&frames, &frame_refcell.join.df_selection);
+                    if let Some(j_df) = join_df {
+                        println!("Join {:?}", key);
+                        let df = &frame_refcell.data;
+                        frame_refcell.join.joindata = df
+                            .join(
+                                &j_df.data,
+                                [&frame_refcell.join.left_on_selection],
+                                [&frame_refcell.join.right_on_selection],
+                                JoinType::Inner,
+                                None,
+                            )
+                            .ok();
+                        println!("Join Data {:?}", frame_refcell.join.joindata);
+                    } else {
+                        println!("Main DF: {:?} - Join DF {:?}", frame_refcell.title, "none");
+                    }
+                }
+            }
+        }
+    }
 }
