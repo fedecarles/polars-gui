@@ -834,7 +834,7 @@ fn display_dataframe(df: &DataFrame, ui: &mut egui::Ui) {
                     row.col(|ui| {
                         if let Ok(column) = &df.column(col) {
                             if let Ok(value) = column.get(row_index) {
-                                ui.label(format!("{}", value));
+                                ui.label(format!("{}", value).replace('"', ""));
                             }
                         }
                     });
