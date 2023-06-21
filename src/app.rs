@@ -10,10 +10,9 @@ use std::fmt::Debug;
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
     label: String,
-
     // this how you opt-out of serialization of a member
     #[serde(skip)]
-    value: f32,
+    version: f32,
     #[serde(skip)]
     frames: Vec<HashMap<String, DataFrameContainer>>,
     titles: Vec<String>,
@@ -24,7 +23,7 @@ impl Default for App {
     fn default() -> Self {
         Self {
             label: "Polars GUI".to_owned(),
-            value: 0.1,
+            version: 0.1,
             frames: Vec::new(),
             titles: Vec::new(),
             df_cols: HashMap::default(),
@@ -241,7 +240,7 @@ impl DataFrameContainer {
                     })
                 });
                 ui.collapsing("Aggregate", |ui| {
-                    ui.label(egui::RichText::new("Group by:").text_style(egui::TextStyle::Heading));
+                    ui.label("Group by:");
                     ui.horizontal(|ui| {
                         ComboBox::new("Grp", "")
                             .selected_text(&self.aggregate.grp_selection)
@@ -266,8 +265,8 @@ impl DataFrameContainer {
                             }
                         }
                     });
-                    ui.label(format!("{:?}", &self.aggregate.groupby));
-                    ui.label(egui::RichText::new("Columns:").text_style(egui::TextStyle::Heading));
+                    ui.label(format!("Selected: {:?}", &self.aggregate.groupby));
+                    ui.label("Columns: ");
                     ui.horizontal(|ui| {
                         ComboBox::new("Agg", "")
                             .selected_text(&self.aggregate.agg_selection)
@@ -292,8 +291,8 @@ impl DataFrameContainer {
                             }
                         }
                     });
-                    ui.label(format!("{:?}", &self.aggregate.aggcols));
-                    ui.label(egui::RichText::new("Metric:").text_style(egui::TextStyle::Heading));
+                    ui.label(format!("Selected: {:?}", &self.aggregate.aggcols));
+                    ui.label("Metric: ");
                     ui.horizontal(|ui| {
                         ui.radio_value(&mut self.aggregate.aggfunc, AggFunc::Count, "Count");
                         ui.radio_value(&mut self.aggregate.aggfunc, AggFunc::Sum, "Sum");
@@ -318,8 +317,8 @@ impl DataFrameContainer {
                             str_agg,
                             &self.aggregate.aggfunc,
                         );
-                        if aggdf.is_ok() {
-                            self.aggregate.aggdata = Some(aggdf.unwrap_or_default());
+                        if let Ok(aggregated) = aggdf {
+                            self.aggregate.aggdata = Some(aggregated);
                         }
                     }
                     if self.aggregate.display {
@@ -380,44 +379,46 @@ impl DataFrameContainer {
                     }
                 });
                 ui.collapsing("Melt", |ui| {
-                    ui.label(egui::RichText::new("Id Vars:").text_style(egui::TextStyle::Heading));
-                    ComboBox::new("Idvars", "")
-                        .selected_text(&self.melt.id_selection)
-                        .show_ui(ui, |ui| {
-                            for col in &self.columns {
-                                ui.selectable_value(
-                                    &mut self.melt.id_selection,
-                                    col.to_owned(),
-                                    col,
-                                );
+                    ui.label("ID Vars: ");
+                    ui.horizontal(|ui| {
+                        ComboBox::new("Idvars", "")
+                            .selected_text(&self.melt.id_selection)
+                            .show_ui(ui, |ui| {
+                                for col in &self.columns {
+                                    ui.selectable_value(
+                                        &mut self.melt.id_selection,
+                                        col.to_owned(),
+                                        col,
+                                    );
+                                }
+                            });
+                        if ui.button("Add").clicked() {
+                            if !self.melt.id_vars.contains(&self.melt.id_selection) {
+                                self.melt.id_vars.push(self.melt.id_selection.clone());
                             }
-                        });
-                    if ui.button("Add").clicked() {
-                        if !self.melt.id_vars.contains(&self.melt.id_selection) {
-                            self.melt.id_vars.push(self.melt.id_selection.clone());
                         }
-                    }
-                    ui.label(format!("{:?}", &self.melt.id_vars));
-                    ui.label(
-                        egui::RichText::new("Value Vars:").text_style(egui::TextStyle::Heading),
-                    );
-                    ComboBox::new("Valvars", "")
-                        .selected_text(&self.melt.val_selection)
-                        .show_ui(ui, |ui| {
-                            for col in &self.columns {
-                                ui.selectable_value(
-                                    &mut self.melt.val_selection,
-                                    col.to_owned(),
-                                    col,
-                                );
+                    });
+                    ui.label(format!("Selected: {:?}", &self.melt.id_vars));
+                    ui.label("Value Vars: ");
+                    ui.horizontal(|ui| {
+                        ComboBox::new("Valvars", "")
+                            .selected_text(&self.melt.val_selection)
+                            .show_ui(ui, |ui| {
+                                for col in &self.columns {
+                                    ui.selectable_value(
+                                        &mut self.melt.val_selection,
+                                        col.to_owned(),
+                                        col,
+                                    );
+                                }
+                            });
+                        if ui.button("Add").clicked() {
+                            if !self.melt.value_vars.contains(&self.melt.val_selection) {
+                                self.melt.value_vars.push(self.melt.val_selection.clone());
                             }
-                        });
-                    if ui.button("Add").clicked() {
-                        if !self.melt.value_vars.contains(&self.melt.val_selection) {
-                            self.melt.value_vars.push(self.melt.val_selection.clone());
                         }
-                    }
-                    ui.label(format!("{:?}", &self.melt.value_vars));
+                    });
+                    ui.label(format!("Selected: {:?}", &self.melt.value_vars));
                     if ui.button("Melt").clicked() {
                         self.melt.display = true;
                         let melted_df = self.data.melt(&self.melt.id_vars, &self.melt.value_vars);
@@ -434,7 +435,6 @@ impl DataFrameContainer {
                             });
                     }
                 });
-                ui.collapsing("Concatenate", |ui| {});
             });
     }
 }
@@ -489,9 +489,10 @@ impl eframe::App for App {
         egui::CentralPanel::default().show(ctx, |ui| {
             let mut temp_frames = Vec::new(); // Temporary vector to hold the filtered frames
             let temp_joins = self.frames.clone();
+            let nr_frames = &self.frames.len();
 
             for map in self.frames.iter_mut() {
-                for (key, val) in map {
+                for (_key, val) in map {
                     let frame_refcell = val;
                     frame_refcell.show(ctx);
 
@@ -500,7 +501,8 @@ impl eframe::App for App {
                     // data in a new window.
                     // TODO: revise/re-factor filter functionality
                     if frame_refcell.filter.filtered_data.is_some() {
-                        let filtered_title = format!("filtered_{}{}", &frame_refcell.title, "test");
+                        let filtered_title =
+                            format!("filtered_{}{}", &frame_refcell.title, &nr_frames);
                         let filtered_df = DataFrameContainer::new(
                             frame_refcell
                                 .clone()
@@ -554,7 +556,8 @@ impl eframe::App for App {
                                     None,
                                 );
                                 if let Ok(joined) = joined_df {
-                                    let joined_title = format!("joined_{}", frame_refcell.title);
+                                    let joined_title =
+                                        format!("joined_{}{}", frame_refcell.title, &nr_frames);
                                     let joined_container =
                                         DataFrameContainer::new(joined.clone(), &joined_title);
                                     match frame_refcell.join.inplace {
