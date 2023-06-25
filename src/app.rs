@@ -518,7 +518,6 @@ impl eframe::App for App {
                                     format!("filtered_{}", &frame_refcell.title),
                                     filtered_df,
                                 );
-                                //self.frames.push(filter_hash);
                                 temp_frames.push(filter_hash);
                                 // cleanup. set original filtered data back to None
                                 frame_refcell.filter.filtered_data = None;
@@ -543,44 +542,7 @@ impl eframe::App for App {
                     }
 
                     if frame_refcell.join.join {
-                        if !frame_refcell.join.df_selection.is_empty() {
-                            let join_df =
-                                get_container(&temp_joins, &frame_refcell.join.df_selection);
-                            if let Some(j_df) = join_df {
-                                let df = &frame_refcell.data;
-                                let joined_df = df.join(
-                                    &j_df.data,
-                                    [&frame_refcell.join.left_on_selection],
-                                    [&frame_refcell.join.right_on_selection],
-                                    frame_refcell.join.how.clone(),
-                                    None,
-                                );
-                                if let Ok(joined) = joined_df {
-                                    let joined_title =
-                                        format!("joined_{}{}", frame_refcell.title, &nr_frames);
-                                    let joined_container =
-                                        DataFrameContainer::new(joined.clone(), &joined_title);
-                                    match frame_refcell.join.inplace {
-                                        false => {
-                                            let mut join_hash = HashMap::new();
-                                            join_hash.insert(joined_title, joined_container);
-                                            temp_frames.push(join_hash);
-                                            // cleanup. set original filtered data back to None
-                                            frame_refcell.filter.filtered_data = None;
-                                        }
-                                        true => {
-                                            frame_refcell.data = joined.clone();
-                                            frame_refcell.shape = joined.shape();
-                                            frame_refcell.summary.summary_data =
-                                                joined.describe(None).ok();
-                                        }
-                                    }
-                                }
-                                frame_refcell.join.join = false;
-                            } else {
-                                println!("DataFrameContainer could not be found");
-                            }
-                        }
+                        join_dataframe(frame_refcell, &mut temp_frames, temp_joins.clone());
                     }
                 }
             }
@@ -853,4 +815,45 @@ fn get_container(
         }
     }
     None
+}
+
+fn join_dataframe(
+    container: &mut DataFrameContainer,
+    frame_vec: &mut Vec<HashMap<String, DataFrameContainer>>,
+    join_vec: Vec<HashMap<String, DataFrameContainer>>,
+) {
+    if !container.join.df_selection.is_empty() {
+        let join_df = get_container(&join_vec, &container.join.df_selection);
+        if let Some(j_df) = join_df {
+            let df = &container.data;
+            let joined_df = df.join(
+                &j_df.data,
+                [&container.join.left_on_selection],
+                [&container.join.right_on_selection],
+                container.join.how.clone(),
+                None,
+            );
+            if let Ok(joined) = joined_df {
+                let joined_title = format!("joined_{}{}", container.title, &frame_vec.len());
+                let joined_container = DataFrameContainer::new(joined.clone(), &joined_title);
+                match container.join.inplace {
+                    false => {
+                        let mut join_hash = HashMap::new();
+                        join_hash.insert(joined_title, joined_container);
+                        frame_vec.push(join_hash);
+                        // cleanup. set original filtered data back to None
+                        container.filter.filtered_data = None;
+                    }
+                    true => {
+                        container.data = joined.clone();
+                        container.shape = joined.shape();
+                        container.summary.summary_data = joined.describe(None).ok();
+                    }
+                }
+            }
+            container.join.join = false;
+        } else {
+            println!("DataFrameContainer could not be found");
+        }
+    }
 }
