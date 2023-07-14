@@ -2,10 +2,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 // When compiling natively:
-#[cfg(not(target_arch = "wasm32"))]
+//#[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result<()> {
     // Log to stdout (if you run with `RUST_LOG=debug`).
-    tracing_subscriber::fmt::init();
+    //tracing_subscriber::fmt::init();
 
     let native_options = eframe::NativeOptions::default();
     let _app = Box::new(|cc| Box::new(polarsgui::App::new(cc)));
@@ -24,7 +24,7 @@ fn main() {
     console_error_panic_hook::set_once();
 
     // Redirect tracing to console.log and friends:
-    tracing_wasm::set_as_global_default();
+    //tracing_wasm::set_as_global_default();
 
     let web_options = eframe::WebOptions::default();
 
@@ -32,7 +32,7 @@ fn main() {
         eframe::start_web(
             "the_canvas_id", // hardcode it
             web_options,
-            Box::new(|cc| Box::new(polarsgui::TemplateApp::new(cc))),
+            Box::new(|cc| Box::new(polarsgui::App::new(cc))),
         )
         .await
         .expect("failed to start eframe");
