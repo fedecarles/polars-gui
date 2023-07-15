@@ -18,11 +18,23 @@ for UI rendering.
 * Melt/Reshape data
 * Merge/Join datasets
 
+## Installation
+```
+git clone https://github.com/fedecarles/polars-gui
+cd polars-gui
+cargo build // build locally
+./target/release/polarsgui // run program
+```
 ## Usage
-
 ### Load and View Data
+![load-gif](./assets/load.gif)
 ### DataFrame Summary
+![summary-gif](./assets/summary.gif)
 ### Filter DataFrame
+![filer-gif](./assets/filter.gif)
 ### Aggregate
+![aggregate-gif](./assets/aggregate.gif)
 ### Melt DataFrame
+![melt-gif](./assets/melt.gif)
 ### Merge DataFrame
+![merge-gif](./assets/merge.gif)
