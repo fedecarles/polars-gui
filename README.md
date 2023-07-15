@@ -26,15 +26,13 @@ cargo build // build locally
 ./target/release/polarsgui // run program
 ```
 ## Usage
-### Load and View Data
-![load-gif](./assets/load_df.gif)
-### DataFrame Summary
-![summary-gif](./assets/summary_df.gif)
+### Data View and Description
+![load-gif](./assets/view_data.gif)
 ### Filter DataFrame
-![filer-gif](./assets/filter_df.gif)
+![filer-gif](./assets/filter_data.gif)
 ### Aggregate
-![aggregate-gif](./assets/aggregate_df.gif)
+![aggregate-gif](./assets/aggregate_data.gif)
 ### Melt DataFrame
-![melt-gif](./assets/melt_df.gif)
+![melt-gif](./assets/melt_data.gif)
 ### Merge DataFrame
-![merge-gif](./assets/merge_df.gif)
+![merge-gif](./assets/merge_data.gif)
