@@ -27,14 +27,14 @@ cargo build // build locally
 ```
 ## Usage
 ### Load and View Data
-![load-gif](./assets/load.gif)
+![load-gif](./assets/load_df.gif)
 ### DataFrame Summary
-![summary-gif](./assets/summary.gif)
+![summary-gif](./assets/summary_df.gif)
 ### Filter DataFrame
-![filer-gif](./assets/filter.gif)
+![filer-gif](./assets/filter_df.gif)
 ### Aggregate
-![aggregate-gif](./assets/aggregate.gif)
+![aggregate-gif](./assets/aggregate_df.gif)
 ### Melt DataFrame
-![melt-gif](./assets/melt.gif)
+![melt-gif](./assets/melt_df.gif)
 ### Merge DataFrame
-![merge-gif](./assets/merge.gif)
+![merge-gif](./assets/merge_df.gif)
