@@ -99,7 +99,7 @@ impl eframe::App for App {
 
             for map in self.frames.iter_mut() {
                 for (_key, val) in map {
-                    let mut frame_refcell = val;
+                    let frame_refcell = val;
                     frame_refcell.show(ctx);
 
                     // Filter creates a new DataFrameContainer. InPlace option updates the
