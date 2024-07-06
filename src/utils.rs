@@ -24,14 +24,15 @@ pub fn display_dataframe(df: &DataFrame, ui: &mut egui::Ui) {
             }
         })
         .body(|body| {
-            body.rows(10.0, nr_rows, |row_index, mut row| {
+            body.rows(10.0, nr_rows, |mut row| {
+                let idx = row.index();
                 row.col(|ui| {
-                    ui.label(format!("{}", row_index));
+                    ui.label(format!("{}", idx));
                 });
                 for col in cols {
                     row.col(|ui| {
                         if let Ok(column) = &df.column(col) {
-                            if let Ok(value) = column.get(row_index) {
+                            if let Ok(value) = column.get(idx) {
                                 ui.label(format!("{}", value).replace('"', ""));
                             }
                         }

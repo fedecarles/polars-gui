@@ -3,21 +3,26 @@ name = "polarsgui"
 version = "0.1.0"
 authors = ["Federico Carles<federico.carles@pm.me>"]
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.76"
 
 
 [dependencies]
-egui = "0.22.0"
-egui_extras = "0.22.0"
-eframe = { version = "0.22.0", default-features = false, features = [
+egui = "0.28"
+egui_extras = "0.28.1"
+eframe = { version = "0.28", default-features = false, features = [
     # "accesskit",     # Make egui comptaible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
     "glow",          # Use the glow rendering backend. Alternative: "wgpu".
     "persistence",   # Enable restoring app state when restarting the app.
 ] }
 log = "0.4"
-polars = { versio = "0.29.0", features = ["describe", "lazy"] }
-rfd = { version = "0.11.3" }
+polars = { version = "0.41.3", features = [
+    "describe",
+    "lazy",
+    "csv",
+    "dtype-slim",
+], default_features = false }
+rfd = { version = "0.14.1" }
 
 # You only need serde if you want app persistence:
 serde = { version = "1", features = ["derive"] }
@@ -33,6 +38,9 @@ env_logger = "0.10"
 #tracing-wasm = "0.2.1"
 wasm-bindgen-futures = "0.4"
 
+# to access the DOM (to hide the loading text)
+[target.'cfg(target_arch = "wasm32")'.dependencies.web-sys]
+version = "0.3.4"
 
 [profile.release]
 opt-level = 2 # fast and small wasm
@@ -50,4 +58,5 @@ opt-level = 2
 
 # If you fork https://github.com/emilk/egui you can test with:
 # egui = { path = "../egui/crates/egui" }
+# eframe = { path = "../egui/crates/eframe" }
 # eframe = { path = "../egui/crates/eframe" }

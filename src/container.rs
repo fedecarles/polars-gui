@@ -95,32 +95,32 @@ impl DataFrameContainer {
         match aggfunc {
             AggFunc::Count => df
                 .lazy()
-                .groupby(groupby)
+                .group_by(groupby)
                 .agg([cols(aggcols).count()])
                 .collect(),
             AggFunc::Sum => df
                 .lazy()
-                .groupby(groupby)
+                .group_by(groupby)
                 .agg([cols(aggcols).sum()])
                 .collect(),
             AggFunc::Mean => df
                 .lazy()
-                .groupby(groupby)
+                .group_by(groupby)
                 .agg([cols(aggcols).mean()])
                 .collect(),
             AggFunc::Median => df
                 .lazy()
-                .groupby(groupby)
+                .group_by(groupby)
                 .agg([cols(aggcols).median()])
                 .collect(),
             AggFunc::Min => df
                 .lazy()
-                .groupby(groupby)
+                .group_by(groupby)
                 .agg([cols(aggcols).min()])
                 .collect(),
             AggFunc::Max => df
                 .lazy()
-                .groupby(groupby)
+                .group_by(groupby)
                 .agg([cols(aggcols).max()])
                 .collect(),
         }
@@ -139,8 +139,7 @@ impl DataFrameContainer {
                     &j_df.data,
                     [&container.join.left_on_selection],
                     [&container.join.right_on_selection],
-                    container.join.how.clone(),
-                    None,
+                    JoinArgs::new(container.join.how.clone()),
                 );
                 if let Ok(joined) = joined_df {
                     let joined_title = format!("joined_{}{}", container.title, &frame_vec.len());
@@ -156,7 +155,7 @@ impl DataFrameContainer {
                         true => {
                             container.data = joined.clone();
                             container.shape = joined.shape();
-                            container.summary.summary_data = joined.describe(None).ok();
+                            //container.summary.summary_data = joined.describe(None).ok();
                         }
                     }
                 }
@@ -173,7 +172,7 @@ impl DataFrameContainer {
 
         window
             .open(&mut is_open)
-            .scroll2([true, true])
+            .scroll([true, true])
             .auto_sized()
             .resizable(false)
             .show(ctx, |ui| self.show_content(ctx, ui));
@@ -206,14 +205,14 @@ impl DataFrameContainer {
                 if btn.clicked() {
                     self.summary.display = !&self.summary.display;
                     if self.summary.summary_data.is_none() {
-                        self.summary.summary_data = self.data.describe(None).ok();
+                        //self.summary.summary_data = self.data.describe(None).ok();
                     }
                 }
                 if self.summary.display {
                     let binding = self.summary.summary_data.clone().unwrap_or_default();
                     Window::new(format!("{}{}", String::from("Summary: "), &self.title))
                         .open(&mut self.summary.display)
-                        .scroll2([true, true])
+                        .scroll([true, true])
                         .show(ctx, |ui| display_dataframe(&binding, ui));
                 }
                 ui.end_row();
@@ -427,7 +426,7 @@ impl DataFrameContainer {
             ui.horizontal(|ui| {
                 ui.radio_value(&mut self.join.how, JoinType::Inner, "Inner");
                 ui.radio_value(&mut self.join.how, JoinType::Left, "Left");
-                ui.radio_value(&mut self.join.how, JoinType::Outer, "Outer");
+                ui.radio_value(&mut self.join.how, JoinType::Full, "Full");
                 ui.radio_value(&mut self.join.how, JoinType::Cross, "Cross");
             });
             if ui.button("Join").clicked() {
@@ -469,7 +468,7 @@ impl DataFrameContainer {
             ui.label(format!("Selected: {:?}", &self.melt.value_vars));
             if ui.button("Melt").clicked() {
                 self.melt.display = true;
-                let melted_df = self.data.melt(&self.melt.id_vars, &self.melt.value_vars);
+                let melted_df = self.data.unpivot(&self.melt.id_vars, &self.melt.value_vars);
                 if melted_df.is_ok() {
                     self.melt.meltdata = melted_df.ok();
                 }
