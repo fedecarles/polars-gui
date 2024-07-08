@@ -2,11 +2,16 @@ use crate::container::*;
 use polars::prelude::*;
 #[cfg(not(target_arch = "wasm32"))]
 use rfd::FileDialog;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::future::Future;
+use std::rc::Rc;
 
 #[cfg(target_arch = "wasm32")]
 use rfd::AsyncFileDialog;
+#[cfg(target_arch = "wasm32")]
+use web_sys::console;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize, Debug)]
@@ -17,7 +22,7 @@ pub struct App {
     #[serde(skip)]
     version: f32,
     #[serde(skip)]
-    frames: Vec<HashMap<String, DataFrameContainer>>,
+    frames: Rc<RefCell<Vec<HashMap<String, DataFrameContainer>>>>,
     titles: Vec<String>,
     df_cols: HashMap<String, Vec<String>>,
 }
@@ -27,7 +32,7 @@ impl Default for App {
         Self {
             label: "Polars GUI".to_owned(),
             version: 0.1,
-            frames: Vec::new(),
+            frames: Rc::new(RefCell::new(Vec::new())),
             titles: Vec::new(),
             df_cols: HashMap::default(),
         }
@@ -64,29 +69,52 @@ impl eframe::App for App {
                 ui.menu_button("New", |ui| {
                     if ui.button("DataFrame").clicked() {
                         #[cfg(target_arch = "wasm32")]
-                        wasm_bindgen_futures::spawn_local(async move {
-                            let file = AsyncFileDialog::new().pick_file().await;
-                            if let Some(file) = file {
-                                let content = file.read().await;
-                                let cursor = std::io::Cursor::new(content);
-                                let df = CsvReader::new(cursor).finish().unwrap();
-                                let file_name = file.file_name();
-                                let mut hash = HashMap::new();
-                                hash.insert(
-                                    file_name.to_string(),
-                                    DataFrameContainer::new(df.clone(), &file_name),
-                                );
-                                self.frames.push(hash);
-                                let cols = df
-                                    .clone()
-                                    .get_column_names()
-                                    .iter()
-                                    .map(|c| c.to_string())
-                                    .collect();
-                                self.df_cols.insert(String::from(file_name), cols);
-                                self.titles.push(file_name.to_string());
-                            }
-                        });
+                        {
+                            let frames = Rc::clone(&self.frames);
+
+                            execute(async move {
+                                let file = AsyncFileDialog::new().pick_file().await;
+
+                                if let Some(file) = file {
+                                    //file.read().await;
+                                    let content = file.read().await;
+                                    let cursor = std::io::Cursor::new(content);
+                                    let df = CsvReader::new(cursor).finish().unwrap();
+                                    let file_name = file.file_name();
+                                    let mut hash = HashMap::new();
+                                    hash.insert(
+                                        file_name.to_string(),
+                                        DataFrameContainer::new(df.clone(), &file_name),
+                                    );
+                                    frames.borrow_mut().push(hash);
+                                    console::log_1(&df.shape().1.into());
+                                }
+                            });
+                        }
+
+                        //wasm_bindgen_futures::spawn_local(async move {
+                        //    let file = AsyncFileDialog::new().pick_file().await;
+                        //    if let Some(file) = file {
+                        //        let content = file.read().await;
+                        //        let cursor = std::io::Cursor::new(content);
+                        //        let df = CsvReader::new(cursor).finish().unwrap();
+                        //        let file_name = file.file_name();
+                        //        let mut hash = HashMap::new();
+                        //        hash.insert(
+                        //            file_name.to_string(),
+                        //            DataFrameContainer::new(df.clone(), &file_name),
+                        //        );
+                        //        self.frames.push(hash);
+                        //        let cols = df
+                        //            .clone()
+                        //            .get_column_names()
+                        //            .iter()
+                        //            .map(|c| c.to_string())
+                        //            .collect();
+                        //        self.df_cols.insert(String::from(file_name), cols);
+                        //        self.titles.push(file_name.to_string());
+                        //    }
+                        //});
                         #[cfg(not(target_arch = "wasm32"))]
                         if let Some(path) = FileDialog::new().pick_file() {
                             let df: DataFrame = CsvReadOptions::default()
@@ -102,7 +130,7 @@ impl eframe::App for App {
                                 file_name.to_string(),
                                 DataFrameContainer::new(df.clone(), file_name),
                             );
-                            self.frames.push(hash);
+                            self.frames.borrow_mut().push(hash);
                             let cols = df
                                 .clone()
                                 .get_column_names()
@@ -126,10 +154,10 @@ impl eframe::App for App {
             ui.heading("Polars GUI");
 
             let mut temp_frames = Vec::new(); // Temporary vector to hold the filtered frames
-            let temp_joins = &self.frames.clone();
-            let nr_frames = &self.frames.len();
+            let temp_joins = &self.frames.borrow_mut().clone();
+            let nr_frames = &self.frames.borrow_mut().len();
 
-            for map in self.frames.iter_mut() {
+            for map in self.frames.borrow_mut().iter_mut() {
                 for (_key, val) in map {
                     let frame_refcell = val;
                     frame_refcell.show(ctx);
@@ -189,7 +217,12 @@ impl eframe::App for App {
                 }
             }
             // Push the filtered frames into self.frames after the nested loops
-            self.frames.extend(temp_frames);
+            self.frames.borrow_mut().extend(temp_frames);
         });
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn execute<F: Future<Output = ()> + 'static>(f: F) {
+    wasm_bindgen_futures::spawn_local(f);
 }

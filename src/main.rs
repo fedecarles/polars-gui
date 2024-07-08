@@ -8,7 +8,6 @@ fn main() -> eframe::Result<()> {
     //tracing_subscriber::fmt::init();
 
     let native_options = eframe::NativeOptions::default();
-    let _app = Box::new(|cc| Box::new(polarsgui::App::new(cc)));
 
     eframe::run_native(
         "polarsgui",
@@ -28,7 +27,7 @@ fn main() {
     wasm_bindgen_futures::spawn_local(async {
         let start_result = eframe::WebRunner::new()
             .start(
-                "the_canvas_id",
+                "polarsgui",
                 web_options,
                 Box::new(|cc| Ok(Box::new(polarsgui::App::new(cc)))),
             )
