@@ -5,16 +5,19 @@ use rfd::FileDialog;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::future::Future;
 use std::rc::Rc;
 
 #[cfg(target_arch = "wasm32")]
 use rfd::AsyncFileDialog;
 #[cfg(target_arch = "wasm32")]
+use std::future::Future;
+#[cfg(target_arch = "wasm32")]
 use web_sys::console;
+#[cfg(target_arch = "wasm32")]
+use web_sys::wasm_bindgen::JsValue;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[derive(serde::Deserialize, serde::Serialize, Debug)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
     label: String,
@@ -23,8 +26,8 @@ pub struct App {
     version: f32,
     #[serde(skip)]
     frames: Rc<RefCell<Vec<HashMap<String, DataFrameContainer>>>>,
-    titles: Vec<String>,
-    df_cols: HashMap<String, Vec<String>>,
+    titles: Rc<RefCell<Vec<String>>>,
+    df_cols: Rc<RefCell<HashMap<String, Vec<String>>>>,
 }
 
 impl Default for App {
@@ -33,8 +36,8 @@ impl Default for App {
             label: "Polars GUI".to_owned(),
             version: 0.1,
             frames: Rc::new(RefCell::new(Vec::new())),
-            titles: Vec::new(),
-            df_cols: HashMap::default(),
+            titles: Rc::new(RefCell::new(Vec::new())),
+            df_cols: Rc::new(RefCell::new(HashMap::default())),
         }
     }
 }
@@ -71,6 +74,8 @@ impl eframe::App for App {
                         #[cfg(target_arch = "wasm32")]
                         {
                             let frames = Rc::clone(&self.frames);
+                            let titles = Rc::clone(&self.titles);
+                            let df_cols = Rc::clone(&self.df_cols);
 
                             execute(async move {
                                 let file = AsyncFileDialog::new().pick_file().await;
@@ -87,34 +92,17 @@ impl eframe::App for App {
                                         DataFrameContainer::new(df.clone(), &file_name),
                                     );
                                     frames.borrow_mut().push(hash);
-                                    console::log_1(&df.shape().1.into());
+                                    titles.borrow_mut().push(file_name.to_string());
+                                    let cols = df
+                                        .clone()
+                                        .get_column_names()
+                                        .iter()
+                                        .map(|c| c.to_string())
+                                        .collect();
+                                    df_cols.borrow_mut().insert(String::from(file_name), cols);
                                 }
                             });
                         }
-
-                        //wasm_bindgen_futures::spawn_local(async move {
-                        //    let file = AsyncFileDialog::new().pick_file().await;
-                        //    if let Some(file) = file {
-                        //        let content = file.read().await;
-                        //        let cursor = std::io::Cursor::new(content);
-                        //        let df = CsvReader::new(cursor).finish().unwrap();
-                        //        let file_name = file.file_name();
-                        //        let mut hash = HashMap::new();
-                        //        hash.insert(
-                        //            file_name.to_string(),
-                        //            DataFrameContainer::new(df.clone(), &file_name),
-                        //        );
-                        //        self.frames.push(hash);
-                        //        let cols = df
-                        //            .clone()
-                        //            .get_column_names()
-                        //            .iter()
-                        //            .map(|c| c.to_string())
-                        //            .collect();
-                        //        self.df_cols.insert(String::from(file_name), cols);
-                        //        self.titles.push(file_name.to_string());
-                        //    }
-                        //});
                         #[cfg(not(target_arch = "wasm32"))]
                         if let Some(path) = FileDialog::new().pick_file() {
                             let df: DataFrame = CsvReadOptions::default()
@@ -137,8 +125,10 @@ impl eframe::App for App {
                                 .iter()
                                 .map(|c| c.to_string())
                                 .collect();
-                            self.df_cols.insert(String::from(file_name), cols);
-                            self.titles.push(file_name.to_string());
+                            self.df_cols
+                                .borrow_mut()
+                                .insert(String::from(file_name), cols);
+                            self.titles.borrow_mut().push(file_name.to_string());
                         }
                     }
                 });
@@ -151,8 +141,6 @@ impl eframe::App for App {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Polars GUI");
-
             let mut temp_frames = Vec::new(); // Temporary vector to hold the filtered frames
             let temp_joins = &self.frames.borrow_mut().clone();
             let nr_frames = &self.frames.borrow_mut().len();
@@ -199,8 +187,9 @@ impl eframe::App for App {
 
                     // Join requires the selection of another DataFrameContainer in the frames list
                     // and the mapped columns stored in df_cols.
-                    frame_refcell.join.df_list = self.titles.clone();
-                    let df_cols = self.df_cols.get(&frame_refcell.join.df_selection);
+                    frame_refcell.join.df_list = self.titles.borrow_mut().clone();
+                    let cols = self.df_cols.borrow_mut().clone();
+                    let df_cols = cols.get(&frame_refcell.join.df_selection);
 
                     if df_cols.is_some() {
                         frame_refcell.join.right_on_cols =
