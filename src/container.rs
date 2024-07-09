@@ -5,6 +5,7 @@ use crate::melt::DataFrameMelt;
 use crate::summary::DataFrameSummary;
 use crate::utils::{display_dataframe, get_container};
 use egui::{ComboBox, Grid, TextEdit, Window};
+use polars::prelude::DataFrameJoinOps;
 use polars::prelude::*;
 use std::collections::HashMap;
 
