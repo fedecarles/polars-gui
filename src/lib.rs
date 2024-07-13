@@ -6,6 +6,5 @@ mod container;
 mod filter;
 mod join;
 mod melt;
-mod summary;
 mod utils;
 pub use app::App;

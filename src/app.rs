@@ -179,8 +179,6 @@ impl eframe::App for App {
                             true => {
                                 frame_refcell.data = filtered_df.data.clone();
                                 frame_refcell.shape = filtered_df.data.shape().clone();
-                                //frame_refcell.summary.summary_data =
-                                //filtered_df.data.clone().describe(None).ok();
                             }
                         }
                     }

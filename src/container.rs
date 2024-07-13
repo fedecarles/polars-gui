@@ -2,7 +2,6 @@ use crate::aggregate::*;
 use crate::filter::*;
 use crate::join::DataFrameJoin;
 use crate::melt::DataFrameMelt;
-use crate::summary::DataFrameSummary;
 use crate::utils::{display_dataframe, get_container};
 use egui::{ComboBox, Grid, TextEdit, Window};
 use polars::prelude::DataFrameJoinOps;
@@ -14,7 +13,6 @@ pub struct DataFrameContainer {
     pub title: String,
     pub shape: (usize, usize),
     pub data: DataFrame,
-    pub summary: DataFrameSummary,
     pub columns: Vec<String>,
     pub data_display: bool,
     pub is_open: bool,
@@ -31,7 +29,6 @@ impl DataFrameContainer {
             title: String::from(format!("{}", String::from(title))),
             shape: df.shape(),
             data: df.clone(),
-            summary: DataFrameSummary::default(),
             columns: df
                 .get_column_names()
                 .iter()
@@ -156,7 +153,6 @@ impl DataFrameContainer {
                         true => {
                             container.data = joined.clone();
                             container.shape = joined.shape();
-                            //container.summary.summary_data = joined.describe(None).ok();
                         }
                     }
                 }
@@ -199,22 +195,6 @@ impl DataFrameContainer {
                     Window::new(format!("{}{}", String::from("Data: "), &self.title))
                         .open(&mut self.data_display)
                         .show(ctx, |ui| display_dataframe(&self.data, ui));
-                }
-                ui.end_row();
-                ui.label("Summary: ");
-                let btn = ui.button("View");
-                if btn.clicked() {
-                    self.summary.display = !&self.summary.display;
-                    if self.summary.summary_data.is_none() {
-                        //self.summary.summary_data = self.data.describe(None).ok();
-                    }
-                }
-                if self.summary.display {
-                    let binding = self.summary.summary_data.clone().unwrap_or_default();
-                    Window::new(format!("{}{}", String::from("Summary: "), &self.title))
-                        .open(&mut self.summary.display)
-                        .scroll([true, true])
-                        .show(ctx, |ui| display_dataframe(&binding, ui));
                 }
                 ui.end_row();
                 ui.label("Data Types:");
