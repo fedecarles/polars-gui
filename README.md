@@ -12,10 +12,9 @@ for UI rendering.
 ## Current features
 
 * Load multiple files as Polars DataFrame (currently supports csv data only).
-* Generate summary statistics.
 * Filter data
 * Aggregate functions
-* Melt/Reshape data
+* Reshape data
 * Merge/Join datasets
 
 ## Installation
@@ -25,6 +24,13 @@ cd polars-gui
 cargo build // build locally
 ./target/release/polarsgui // run program
 ```
+
+The current version also compiles on wasm. To run on the browser (that supports wasm) run:
+```
+trunk serve
+```
+
+
 ## Usage
 ### Data View and Description
 ![load-gif](./assets/view_data.gif)
