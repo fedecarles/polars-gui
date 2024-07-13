@@ -11,10 +11,6 @@ use std::rc::Rc;
 use rfd::AsyncFileDialog;
 #[cfg(target_arch = "wasm32")]
 use std::future::Future;
-#[cfg(target_arch = "wasm32")]
-use web_sys::console;
-#[cfg(target_arch = "wasm32")]
-use web_sys::wasm_bindgen::JsValue;
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
@@ -140,7 +136,7 @@ impl eframe::App for App {
             });
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ctx, |_ui| {
             let mut temp_frames = Vec::new(); // Temporary vector to hold the filtered frames
             let temp_joins = &self.frames.borrow_mut().clone();
             let nr_frames = &self.frames.borrow_mut().len();
